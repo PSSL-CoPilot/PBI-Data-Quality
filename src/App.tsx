@@ -29,6 +29,18 @@ import {
   runOptimization,
   type OptimizationResult,
 } from "../lib/optimize/engine.ts";
+import {
+  addChange,
+  newSession,
+  revertAll,
+  revertChange,
+  undoLast,
+  workingModel,
+  type Change,
+  type EditSession,
+} from "../lib/edit/session.ts";
+import { Changes } from "./Changes.tsx";
+import { ColumnEditor, MeasureEditor, PartitionEditor, TableEditor } from "./Editor.tsx";
 import { Optimization } from "./Optimization.tsx";
 import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
 
@@ -41,6 +53,7 @@ type View =
   | "Dependencies"
   | "Quality Checks"
   | "Optimization"
+  | "Changes"
   | "Issues"
   | "Team"
   | "Project Settings";
@@ -54,11 +67,12 @@ const NAV: View[] = [
   "Dependencies",
   "Quality Checks",
   "Optimization",
+  "Changes",
   "Issues",
   "Team",
   "Project Settings",
 ];
-const ICONS = ["◫", "▤", "▦", "ƒ", "⌁", "⌘", "✓", "◎", "!", "♙", "⚙"];
+const ICONS = ["◫", "▤", "▦", "ƒ", "⌁", "⌘", "✓", "◎", "⎋", "!", "♙", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
 const NEEDS_MODEL: View[] = ["Tables", "Measures", "Relationships", "Dependencies"];
@@ -82,14 +96,19 @@ type Focus = { type: ObjectType; name: string; table?: string; page?: string } |
 
 export default function App() {
   const [active, setActive] = useState<View>("Overview");
-  const [model, setModel] = useState<Model | null>(null);
+  const [session, setSession] = useState<EditSession | null>(null);
   const [focus, setFocus] = useState<Focus>(null);
   const [search, setSearch] = useState(false);
   const [upload, setUpload] = useState(false);
   const [notice, setNotice] = useState("");
 
+  // The working model is derived by replaying the change list over the
+  // untouched original, so every view reflects pending edits immediately.
+  const working = useMemo(() => (session ? workingModel(session) : null), [session]);
+  const model = working?.model ?? null;
+
   // QA and optimization are pure functions of the model, so neither needs a
-  // separate "run" state; both recompute when a new file is analyzed.
+  // separate "run" state; both recompute when the working model changes.
   const qa = useMemo(() => (model ? runQa(model) : null), [model]);
   const opt = useMemo(() => (model ? runOptimization(model) : null), [model]);
 
@@ -106,7 +125,7 @@ export default function App() {
   }, []);
 
   const analyzed = (next: Model, message: string) => {
-    setModel(next);
+    setSession(newSession(next));
     setFocus(null);
     setUpload(false);
     setActive("Overview");
@@ -171,6 +190,9 @@ export default function App() {
               {view === "Optimization" && opt && opt.opportunities.length > 0 && (
                 <em>{opt.opportunities.length}</em>
               )}
+              {view === "Changes" && session && session.changes.length > 0 && (
+                <em>{session.changes.length}</em>
+              )}
             </button>
           ))}
         </nav>
@@ -229,10 +251,31 @@ export default function App() {
 
           {model && <ModelUnavailableBanner model={model} />}
 
-          {!model || !qa || !opt ? (
+          {!model || !qa || !opt || !session || !working ? (
             <EmptyState onUpload={() => setUpload(true)} />
           ) : (
-            <Views view={active} model={model} qa={qa} opt={opt} focus={focus} goTo={goTo} />
+            <Views
+              view={active}
+              model={model}
+              qa={qa}
+              opt={opt}
+              session={session}
+              working={working}
+              focus={focus}
+              goTo={goTo}
+              onApply={(changes) => {
+                setSession((current) =>
+                  current ? changes.reduce(addChange, current) : current
+                );
+                setNotice(
+                  `${changes.length} change${changes.length === 1 ? "" : "s"} applied — review them in Changes`
+                );
+                setTimeout(() => setNotice(""), 5000);
+              }}
+              onUndo={() => setSession((c) => (c ? undoLast(c) : c))}
+              onRevert={(id) => setSession((c) => (c ? revertChange(c, id) : c))}
+              onRevertAll={() => setSession((c) => (c ? revertAll(c) : c))}
+            />
           )}
         </div>
       </section>
@@ -310,8 +353,14 @@ interface ViewProps {
   model: Model;
   qa: QaResult;
   opt: OptimizationResult;
+  session: EditSession;
+  working: ReturnType<typeof workingModel>;
   focus: Focus;
   goTo: (target: FindingTarget) => void;
+  onApply: (changes: Change[]) => void;
+  onUndo: () => void;
+  onRevert: (changeId: string) => void;
+  onRevertAll: () => void;
 }
 
 function Views({ view, ...props }: ViewProps & { view: View }) {
@@ -333,12 +382,36 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
       return <QualityChecks {...props} />;
     case "Optimization":
       return <Optimization opt={props.opt} goTo={props.goTo} />;
+    case "Changes":
+      return (
+        <Changes
+          session={props.session}
+          working={props.working}
+          onUndo={props.onUndo}
+          onRevert={props.onRevert}
+          onRevertAll={props.onRevertAll}
+        />
+      );
     case "Report Pages":
       return <Pages model={model} focus={props.focus} />;
     case "Tables":
-      return <Tables key={focusKey(props.focus)} model={model} focus={props.focus} />;
+      return (
+        <Tables
+          key={focusKey(props.focus)}
+          model={model}
+          focus={props.focus}
+          onApply={props.onApply}
+        />
+      );
     case "Measures":
-      return <Measures key={focusKey(props.focus)} model={model} focus={props.focus} />;
+      return (
+        <Measures
+          key={focusKey(props.focus)}
+          model={model}
+          focus={props.focus}
+          onApply={props.onApply}
+        />
+      );
     case "Relationships":
       return <Relationships model={model} focus={props.focus} />;
     case "Dependencies":
@@ -664,7 +737,15 @@ function Toolbar({
   );
 }
 
-function Tables({ model, focus }: { model: Model; focus: Focus }) {
+function Tables({
+  model,
+  focus,
+  onApply,
+}: {
+  model: Model;
+  focus: Focus;
+  onApply: (changes: Change[]) => void;
+}) {
   const { query, setQuery, filtered } = useFilter(model.tables, (t) => t.name + t.kind);
   // A finding can point here, so open the table it named on first render.
   const [selected, setSelected] = useState<Table | null>(() =>
@@ -708,12 +789,40 @@ function Tables({ model, focus }: { model: Model; focus: Focus }) {
           </tbody>
         </table>
       </article>
-      {selected && <TableDrawer table={selected} close={() => setSelected(null)} />}
+      {selected && (
+        <TableDrawer
+          model={model}
+          table={selected}
+          close={() => setSelected(null)}
+          onApply={(changes) => {
+            onApply(changes);
+            setSelected(null);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function TableDrawer({ table, close }: { table: Table; close: () => void }) {
+function TableDrawer({
+  model,
+  table,
+  close,
+  onApply,
+}: {
+  model: Model;
+  table: Table;
+  close: () => void;
+  onApply: (changes: Change[]) => void;
+}) {
+  const [editing, setEditing] = useState<
+    { kind: "table" } | { kind: "column"; name: string } | { kind: "partition"; name: string } | null
+  >(null);
+
+  const column = editing?.kind === "column" ? table.columns.find((c) => c.name === editing.name) : undefined;
+  const partition =
+    editing?.kind === "partition" ? table.partitions.find((p) => p.name === editing.name) : undefined;
+
   return (
     <div className="drawer">
       <div className="drawerHead">
@@ -724,6 +833,46 @@ function TableDrawer({ table, close }: { table: Table; close: () => void }) {
         <button onClick={close}>×</button>
       </div>
 
+      <div className="tabs">
+        <button className={editing === null ? "on" : ""} onClick={() => setEditing(null)}>
+          Overview
+        </button>
+        <button
+          className={editing?.kind === "table" ? "on" : ""}
+          onClick={() => setEditing({ kind: "table" })}
+        >
+          Edit table
+        </button>
+      </div>
+
+      {editing?.kind === "table" && (
+        <TableEditor
+          model={model}
+          table={table}
+          onApply={onApply}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+      {column && (
+        <ColumnEditor
+          model={model}
+          column={column}
+          onApply={onApply}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+      {partition && (
+        <PartitionEditor
+          model={model}
+          partition={partition}
+          onApply={onApply}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {editing !== null ? null : (
+        <>
+
       {table.expression && (
         <>
           <label>CALCULATED TABLE DAX</label>
@@ -731,29 +880,47 @@ function TableDrawer({ table, close }: { table: Table; close: () => void }) {
         </>
       )}
 
-      {table.partitions.map((partition) => (
-        <div key={partition.name}>
+      {table.partitions.map((entry) => (
+        <div key={entry.name}>
           <label>
-            {partition.sourceType === "m"
+            {entry.sourceType === "m"
               ? "POWER QUERY (M)"
-              : partition.sourceType === "query"
+              : entry.sourceType === "query"
                 ? "NATIVE QUERY"
-                : `PARTITION · ${partition.sourceType.toUpperCase()}`}
+                : `PARTITION · ${entry.sourceType.toUpperCase()}`}
           </label>
-          <pre>{partition.expression ?? "No expression exposed for this partition."}</pre>
+          <pre>{entry.expression ?? "No expression exposed for this partition."}</pre>
+          {entry.expression && (
+            <div className="editActions">
+              <button onClick={() => setEditing({ kind: "partition", name: entry.name })}>
+                Edit query
+              </button>
+            </div>
+          )}
         </div>
       ))}
 
       <div className="objectList">
         <h3>Columns ({table.columns.length})</h3>
-        {table.columns.map((column) => (
-          <div key={column.name}>
-            ◇ {column.name} · {column.dataType}
-            {column.kind === "calculated" ? " · calculated" : ""}
+        {table.columns.map((entry) => (
+          <div
+            key={entry.name}
+            role="button"
+            tabIndex={0}
+            onClick={() => setEditing({ kind: "column", name: entry.name })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setEditing({ kind: "column", name: entry.name });
+            }}
+          >
+            ◇ {entry.name} · {entry.dataType}
+            {entry.kind === "calculated" ? " · calculated" : ""}
             <span>›</span>
           </div>
         ))}
       </div>
+
+        </>
+      )}
 
       <div className="drawerFoot">
         <button onClick={close}>Done</button>
@@ -762,7 +929,15 @@ function TableDrawer({ table, close }: { table: Table; close: () => void }) {
   );
 }
 
-function Measures({ model, focus }: { model: Model; focus: Focus }) {
+function Measures({
+  model,
+  focus,
+  onApply,
+}: {
+  model: Model;
+  focus: Focus;
+  onApply: (changes: Change[]) => void;
+}) {
   const measures = allMeasures(model);
   const { query, setQuery, filtered } = useFilter(measures, (m) => m.name + m.table + m.expression);
   const [selected, setSelected] = useState<Measure | null>(() =>
@@ -815,7 +990,15 @@ function Measures({ model, focus }: { model: Model; focus: Focus }) {
         </table>
       </article>
       {selected && (
-        <MeasureDrawer model={model} measure={selected} close={() => setSelected(null)} />
+        <MeasureDrawer
+          model={model}
+          measure={selected}
+          close={() => setSelected(null)}
+          onApply={(changes) => {
+            onApply(changes);
+            setSelected(null);
+          }}
+        />
       )}
     </>
   );
@@ -825,11 +1008,14 @@ function MeasureDrawer({
   model,
   measure,
   close,
+  onApply,
 }: {
   model: Model;
   measure: Measure;
   close: () => void;
+  onApply: (changes: Change[]) => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const usage = findUsage(model, "measure", measure.table, measure.name);
   const daxRefs = findMeasureReferences(model, measure.name);
 
@@ -843,6 +1029,24 @@ function MeasureDrawer({
         <button onClick={close}>×</button>
       </div>
 
+      <div className="tabs">
+        <button className={editing ? "" : "on"} onClick={() => setEditing(false)}>
+          Overview
+        </button>
+        <button className={editing ? "on" : ""} onClick={() => setEditing(true)}>
+          Edit measure
+        </button>
+      </div>
+
+      {editing ? (
+        <MeasureEditor
+          model={model}
+          measure={measure}
+          onApply={onApply}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <>
       <label>DAX EXPRESSION</label>
       <pre>{measure.expression}</pre>
 
@@ -886,6 +1090,8 @@ function MeasureDrawer({
           ))
         )}
       </div>
+        </>
+      )}
 
       <div className="drawerFoot">
         <button onClick={close}>Done</button>

@@ -58,6 +58,11 @@ rewrite that silently dropped it would change the file.
       pages.ts    Additive page complexity scoring.
       engine.ts   Runner and optimization score.
     lib/powerbi/graph.ts  Dependency index: what uses what.
+    lib/edit/
+      references.ts Finding and rewriting object references inside DAX.
+      apply.ts      Applying one change to a copy of the model, plus preview.
+      session.ts    Change list, working model, validation.
+      diff.ts       Line diff for the before/after view.
     lib/scoring.ts        Score primitives shared by both engines.
     lib/history.ts        Version-history summaries in localStorage.
 
@@ -103,9 +108,27 @@ Everything subtler is reported as advice with no generated code. Nothing is
 executed, so `impact` states what changes structurally and every rewrite is
 labelled as not benchmarked.
 
+## Editing
+
+The extracted model is immutable. The working model is `changes.reduce(apply,
+original)`, recomputed on every change. Undo and revert are list operations, so
+there are no inverse edits to get wrong and reverting a change from the middle
+of the list cannot produce a state no sequence of edits could reach. Replaying
+is cheap because models are tens of kilobytes.
+
+Renames rewrite references by locating them on comment- and string-blanked text,
+which preserves offsets, then splicing the original string. A reference inside a
+comment or string literal is therefore never rewritten.
+
+What cannot be rewritten unambiguously is reported rather than guessed. A table
+passed bare to FILTER or ALL is the main case: the same token could be a
+variable name, so the rename reports it for manual review instead of editing it.
+Validation then re-runs the reference-integrity QA rules and reports only
+problems the edits introduced, not pre-existing ones.
+
 ## Not yet built
 
-- Object editing, dependency-aware rename, change workspace, diff, validation.
+- Writing changes back into a .pbit or .pbip file, dependency-aware rename, change workspace, diff, validation.
 - Export of a modified `.pbit` / `.pbip`.
 - TMDL parsing, so PBIP projects that use `definition/*.tmdl` instead of
   `model.bim` are detected and refused with an explanation.

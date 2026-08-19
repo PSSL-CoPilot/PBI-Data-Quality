@@ -55,6 +55,23 @@ generated code.
 Nothing is ever executed or timed, so no rewrite claims to be faster and
 performance hotspots are reported as *not assessed* rather than estimated.
 
+### Editing and the change workspace
+
+Measures, tables, columns and Power Query/native queries can be edited in place:
+rename, change DAX, description, format string, or move a measure to another
+home table.
+
+A rename is **dependency-aware**. Before it can be applied the UI shows exactly
+what it touches — report pages, visuals, dependent measures, relationships and
+queries — along with anything the rewrite cannot resolve automatically. Applying
+it rewrites dependent DAX, relationship keys and report bindings together.
+
+The uploaded model is never modified. Changes are held as a list and the working
+model is derived by replaying them, so Undo, Revert and Revert-all are exact.
+The **Changes** view shows each edit with an Original/Modified diff, the
+quality and optimization scores before and after, and any broken references the
+edits introduced.
+
 ### Version history
 
 A summary of each analysis (file name, hash, format, score, finding count) is
@@ -71,8 +88,9 @@ self-host Gotham, add your own `@font-face` rules in `src/globals.css`.
 
 ## Not built yet
 
-Object editing, dependency-aware renames, change tracking, validation and
-export. Those views say so rather than showing
+Export. Changes live in the session only: writing them back into a .pbit or
+.pbip file is the next stage, so nothing is downloadable yet and your uploaded
+file is never touched. Those views say so rather than showing
 placeholder content. See `docs/ARCHITECTURE.md`.
 
 ## Deploying
