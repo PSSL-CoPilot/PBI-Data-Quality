@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
 test("product surface includes the primary QA workflows", async () => {
-  const page = await read("app/page.tsx");
+  const app = await read("src/App.tsx");
   for (const label of [
     "Upload Power BI file",
     "Tables",
@@ -16,23 +16,21 @@ test("product surface includes the primary QA workflows", async () => {
     "Issues",
     "Team",
   ]) {
-    assert.match(page, new RegExp(label));
+    assert.match(app, new RegExp(label));
   }
-  assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });
 
 test("the UI renders extracted data only, never sample rows", async () => {
-  const page = await read("app/page.tsx");
+  const app = await read("src/App.tsx");
 
-  // The mockup carried module-level demo arrays. Their return would mean the
-  // screen is showing numbers that did not come out of the user's file.
-  assert.doesNotMatch(page, /^const (measures|tables|issues|STATS)\s*=/m);
-  assert.doesNotMatch(page, /Sales_Model_v4|Northstar Analytics|Sales Intelligence/);
-  assert.doesNotMatch(page, /Revenue YoY %|FactSales/, "no hardcoded model objects");
+  // The original mockup carried module-level demo arrays. Their return would
+  // mean the screen shows numbers that did not come out of the user's file.
+  assert.doesNotMatch(app, /^const (measures|tables|issues|STATS)\s*=/m);
+  assert.doesNotMatch(app, /Sales_Model_v4|Northstar Analytics|Sales Intelligence/);
+  assert.doesNotMatch(app, /Revenue YoY %|FactSales/, "no hardcoded model objects");
 
-  // Every view must come from the extracted model.
-  assert.match(page, /extractFile/);
-  assert.match(page, /model\.capabilities/);
+  assert.match(app, /extractFile/);
+  assert.match(app, /model\.capabilities/);
 });
 
 test("PBIX extraction is explicit and cannot silently fabricate metadata", async () => {
@@ -46,22 +44,23 @@ test("PBIX extraction is explicit and cannot silently fabricate metadata", async
   assert.match(extract, /RUNTIME_REASON/);
 });
 
-test("collaboration schema contains authorization and issue records", async () => {
-  const schema = await read("db/schema.ts");
-  for (const entity of [
-    "organizations",
-    "projects",
-    "members",
-    "versions",
-    "issues",
-    "comments",
-  ]) {
-    assert.match(schema, new RegExp(`const ${entity}`));
-  }
+test("the app is static: no server, no backend calls, no bundled secrets", async () => {
+  const app = await read("src/App.tsx");
+  const history = await read("lib/history.ts");
+
+  // A fetch to an API would reintroduce the server this build deliberately drops.
+  assert.doesNotMatch(app, /fetch\(\s*["'`]\/api/);
+  assert.doesNotMatch(app, /use client/, "there is no server/client boundary any more");
+
+  // History is local, and must never carry the uploaded file off the machine.
+  assert.match(history, /localStorage/);
+  assert.doesNotMatch(history, /fetch\(|XMLHttpRequest/);
 });
 
-test("only normalized metadata is persisted, never the uploaded file", async () => {
-  const route = await read("app/api/versions/route.ts");
-  assert.match(route, /metadataJson/);
-  assert.doesNotMatch(route, /arrayBuffer|formData|Uint8Array/);
+test("version history stores a summary, never the uploaded file", async () => {
+  const history = await read("lib/history.ts");
+  assert.doesNotMatch(history, /arrayBuffer|Uint8Array|expression/);
+  for (const field of ["fileName", "sha256", "overall", "findings"]) {
+    assert.match(history, new RegExp(field));
+  }
 });

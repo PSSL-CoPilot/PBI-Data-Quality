@@ -2,11 +2,16 @@
 
 ## Where analysis runs
 
-Extraction runs **in the browser**. The uploaded file is read with `FileReader`,
-unzipped in memory, and never uploaded. Only the normalized metadata (24–53 KB
-for a real report) is sent to D1 for version history. This is what makes the
-privacy claim true rather than aspirational, and it also sidesteps Worker
-request-size and memory limits entirely.
+Everything runs **in the browser**. There is no server: the uploaded file is
+read locally, unzipped in memory, parsed, checked and scored client-side, and
+never leaves the machine.
+
+That is not just a privacy stance, it is why the app has no backend at all. The
+build output is a plain static bundle, so it hosts on GitHub Pages with no
+account, no secrets and no runtime cost. Version history is a summary kept in
+`localStorage`, which makes it per-browser rather than shared — the price of
+having no server. Real multi-user collaboration (assignment, comments across a
+team) would need a backend added back, and it could be any host.
 
 ## What each Power BI format actually exposes
 
@@ -34,6 +39,8 @@ rewrite that silently dropped it would change the file.
 
 ## Module layout
 
+    index.html    Static entry point; no SSR, no server routes.
+    src/          App shell and UI.
     lib/powerbi/
       zip.ts      ZIP + UTF-16 I/O and content hashing. All binary handling.
       model.ts    The normalized model. Every consumer depends only on this.
@@ -45,6 +52,7 @@ rewrite that silently dropped it would change the file.
       dax.ts      Comment- and string-aware DAX text analysis.
       rules.ts    The rule catalogue; each rule declares what it needs.
       engine.ts   Runner and scoring.
+    lib/history.ts  Version-history summaries in localStorage.
 
 Adding a source format means adding one adapter that produces a `Model`. Nothing
 downstream of `model.ts` changes.
@@ -91,7 +99,8 @@ in a comment does not report an unsafe division. That is checked by test.
 
 ## Product data
 
-Projects, versions, issues, comments and membership live in D1 via Drizzle.
-Version writes are best-effort: if D1 is unreachable the analysis still
-completes locally and the UI says version history was unavailable. Writes must
-enforce project role server-side once sharing is implemented.
+Only a version-history summary is persisted, in `localStorage`: file name,
+content hash, format, score and finding count. The uploaded file and the
+extracted model are never stored, so a long history cannot exhaust the storage
+quota. Writes are best-effort; if storage is unavailable the analysis still
+completes and the UI says the history was not saved.

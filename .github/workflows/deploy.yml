@@ -5,20 +5,22 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# A deploy must never race another deploy, but queued pushes should still land.
+# GitHub Pages needs these to publish; nothing else in the repo requires secrets.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race, but do not drop a queued one either.
 concurrency:
-  group: deploy-production
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Verify and deploy to Cloudflare Workers
+  build:
+    name: Verify and build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment:
-      name: production
-      url: ${{ steps.deploy.outputs.deployment-url }}
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -27,73 +29,37 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
-      # Broken code must not reach production, so the same gates as CI run first.
-      - name: Lint
-        run: npm run lint
+      # Broken code must not reach the published site.
+      - run: npm run lint
+      - run: npm test
 
-      - name: Test
-        run: npm test
+      - uses: actions/configure-pages@v5
+        id: pages
+        with:
+          # Turns Pages on for the repo if it is not already, so no manual
+          # settings change is needed before the first deploy.
+          enablement: true
 
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      # Without this the first failure would be an opaque wrangler auth error.
-      # D1 is optional: analysis runs entirely in the browser, so the app is
-      # usable without it and only version history is lost.
-      - name: Check deploy credentials
-        id: creds
-        run: |
-          missing=""
-          [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
-          [ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing required repository secret(s):$missing"
-            echo "Add them under Settings > Secrets and variables > Actions." >&2
-            echo "See the Deploying section of README.md for how to obtain each one." >&2
-            exit 1
-          fi
-          if [ -n "${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}" ]; then
-            echo "d1=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "d1=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::CLOUDFLARE_D1_DATABASE_ID is not set. Deploying without a database: analysis works, version history does not."
-          fi
-
+      # Pages serves the site from /<repo>/, which configure-pages resolves.
       - name: Build
         run: npm run build
         env:
-          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
-          CLOUDFLARE_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME || 'pbi-quality-studio' }}
+          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
 
-      # `migrations_dir` in the generated config is relative to the config file,
-      # which the build writes to dist/server, so the SQL has to sit beside it.
-      - name: Stage migrations next to the built config
-        if: steps.creds.outputs.d1 == 'true'
-        run: cp -r drizzle dist/server/drizzle
-
-      # Applies only migrations that have not run yet; safe to repeat.
-      - name: Apply D1 migrations
-        if: steps.creds.outputs.d1 == 'true'
-        uses: cloudflare/wrangler-action@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply DB --remote --config dist/server/wrangler.json
+          path: dist
 
-      - name: Deploy Worker
-        id: deploy
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --config dist/server/wrangler.json
-
-      - name: Summary
-        run: |
-          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "URL: ${{ steps.deploy.outputs.deployment-url }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,7 +1,8 @@
 # PBI Quality Studio
 
 Power BI model quality, DAX review, report usage, dependency analysis and
-collaborative issue management.
+automated QA. It is a **static site with no backend**: your file is read in the
+browser and never uploaded anywhere.
 
 ## Run locally
 
@@ -10,10 +11,10 @@ collaborative issue management.
 
 ## What works today
 
-Upload a Power BI file and it is parsed **in your browser** — the file is never
-uploaded. You get real tables, columns, measures with their DAX, relationships,
-Power Query/M and native SQL partitions, report pages, visuals, and which
-pages, visuals and measures reference a given measure.
+Upload a Power BI file and it is parsed in your browser. You get real tables,
+columns, measures with their DAX, relationships, Power Query/M and native SQL
+partitions, report pages, visuals, and which pages, visuals and measures
+reference a given measure.
 
 Which of those you get depends on the format:
 
@@ -30,8 +31,8 @@ why instead of a number.
 
 23 rules across DAX, Model, Relationship, Report and Data quality produce a
 score per category plus an overall score, with critical/high/medium/low counts
-and a priority queue. Every finding names the object it is about and clicking it
-opens that measure, table, relationship or page.
+and a priority queue. Every finding names the object it is about, and clicking
+it opens that measure, table, relationship or page.
 
 A rule that cannot run is reported as **skipped with a reason**, and its
 category scores nothing rather than defaulting to a pass — so a report-only
@@ -39,15 +40,19 @@ PBIX shows "—" for DAX, not 100. Checks that would need a live query engine
 (row counts, cardinality, render timings) are listed as out of scope rather
 than silently omitted.
 
+### Version history
+
+A summary of each analysis (file name, hash, format, score, finding count) is
+kept in `localStorage`. It is per-browser and not shared, which is the
+trade-off for needing no server or account. The uploaded file and the extracted
+model are never stored.
+
 ## Fonts
 
-The UI is set in **Gotham**, which is a licensed Hoefler&Co typeface and is not
-redistributed in this repository. The stack resolves in this order:
-
-1. Gotham installed on the machine (picked up via `local()`).
-2. Gotham webfonts you supply at `public/fonts/Gotham-Book.woff2`,
-   `Gotham-Medium.woff2` and `Gotham-Bold.woff2` — drop them in, no code change.
-3. Montserrat, the closest freely available geometric sans.
+The UI is set in **Gotham**, a licensed Hoefler&Co typeface that cannot be
+redistributed here. It is used when installed on the machine; otherwise the
+stack falls back to Montserrat, the closest freely available geometric sans. To
+self-host Gotham, add your own `@font-face` rules in `src/globals.css`.
 
 ## Not built yet
 
@@ -57,43 +62,23 @@ placeholder content. See `docs/ARCHITECTURE.md`.
 
 ## Deploying
 
-The app is a Cloudflare Worker (SSR + one API route) with a D1 database.
-`.github/workflows/deploy.yml` lints, typechecks, tests and builds on every push
-to `main`, applies pending D1 migrations, then deploys.
+`.github/workflows/deploy.yml` lints, tests and builds on every push to `main`,
+then publishes to GitHub Pages. **No secrets and no third-party accounts are
+required.** The workflow enables Pages on first run.
 
-It needs four one-time setup steps:
-
-1. Create the D1 database:
-   `npx wrangler d1 create pbi-quality-studio` — note the returned `database_id`.
-2. Create a Cloudflare API token with **Workers Scripts: Edit**, **D1: Edit** and
-   **Workers R2/KV** not required.
-3. Add repository secrets under Settings → Secrets and variables → Actions:
-   - `CLOUDFLARE_API_TOKEN` (required)
-   - `CLOUDFLARE_ACCOUNT_ID` (required)
-   - `CLOUDFLARE_D1_DATABASE_ID` (optional, from step 1)
-
-   D1 is optional. Extraction and QA run entirely in the browser, so without a
-   database the app works and only version history is unavailable.
-4. Optionally add the repository variable `CLOUDFLARE_D1_DATABASE_NAME`
-   (defaults to `pbi-quality-studio`).
-
-Without `CLOUDFLARE_D1_DATABASE_ID` the build falls back to a placeholder id
-that is fine for local Miniflare but binds to nothing in production, so version
-history would fail while analysis kept working.
-
-To deploy by hand:
+To host it anywhere else, `npm run build` produces a plain static `dist/`.
+Set `VITE_BASE=/` when serving from a domain root:
 
 ```
-npm run build
-npx wrangler deploy --config dist/server/wrangler.json
+VITE_BASE=/ npm run build
 ```
 
 ## Repository map
 
-- `app/`: QA workspace UI and the version-history API route
+- `index.html`, `src/`: the app shell and UI
 - `lib/powerbi/`: extraction, normalized model, usage analysis
-- `db/`: collaboration and version schema
+- `lib/qa/`: DAX analysis, rule catalogue, scoring
 - `docs/ARCHITECTURE.md`: formats, capabilities and design
-- `tests/`: extraction and product-surface checks (`npm test`)
+- `tests/`: extraction, QA and product-surface checks (`npm test`)
 
 Never commit environment files or corporate PBIX files.

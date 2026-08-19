@@ -1,8 +1,8 @@
-"use client";
 /* eslint-disable jsx-a11y/label-has-associated-control, jsx-a11y/no-autofocus */
 import { useEffect, useMemo, useState } from "react";
 
 import { ExtractionError, extractFile } from "../lib/powerbi/extract.ts";
+import { listVersions, saveVersion } from "../lib/history.ts";
 import type {
   Capability,
   CapabilityId,
@@ -71,7 +71,7 @@ const SEVERITY_CLASS: Record<Severity, string> = {
 
 type Focus = { type: ObjectType; name: string; table?: string; page?: string } | null;
 
-export default function Home() {
+export default function App() {
   const [active, setActive] = useState<View>("Overview");
   const [model, setModel] = useState<Model | null>(null);
   const [focus, setFocus] = useState<Focus>(null);
@@ -1063,6 +1063,7 @@ function Upload({
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; detail?: string } | null>(null);
+  const [history] = useState(() => listVersions());
   useEscape(close);
 
   const analyze = async () => {
@@ -1071,32 +1072,22 @@ function Upload({
     setError(null);
     try {
       const { model, sha256 } = await extractFile(file);
+      const qa = runQa(model);
 
-      // Persistence is best-effort: the analysis is already complete locally and
-      // must not be lost because D1 is unreachable.
-      let stored = false;
-      try {
-        const response = await fetch("/api/versions", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            fileName: model.source.fileName,
-            sha256,
-            status: model.capabilities.model.available ? "model+report" : "report-only",
-            reason: model.capabilities.model.available
-              ? null
-              : (model.capabilities.model as { reason: string }).reason,
-            metadata: model,
-          }),
-        });
-        stored = response.ok;
-      } catch {
-        stored = false;
-      }
+      // Storage can be unavailable in private mode, which must not lose the
+      // analysis; it is already complete in memory either way.
+      const stored = saveVersion({
+        fileName: model.source.fileName,
+        sha256,
+        format: model.source.format,
+        status: model.capabilities.model.available ? "model+report" : "report-only",
+        overall: qa.overall,
+        findings: qa.findings.length,
+      });
 
       onAnalyzed(
         model,
-        `Analyzed ${model.source.fileName}${stored ? "" : " (version history unavailable)"}`
+        `Analyzed ${model.source.fileName}${stored ? "" : " (history not saved: browser storage unavailable)"}`
       );
     } catch (err) {
       setError({
@@ -1168,6 +1159,18 @@ function Upload({
                 template (File → Export → Power BI template) for measures, DAX and relationships.
               </p>
             </div>
+
+            {history.length > 0 && (
+              <div className="objectList">
+                <h3>Previously analyzed on this browser</h3>
+                {history.slice(0, 4).map((version) => (
+                  <div key={version.id}>
+                    ◇ {version.fileName} · {version.format.toUpperCase()} · score{" "}
+                    {version.overall ?? "—"} · {version.findings} findings
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="modalFoot">
               <button onClick={close}>Cancel</button>

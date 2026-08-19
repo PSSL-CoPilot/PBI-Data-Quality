@@ -18,7 +18,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npx tsc --noEmit
       - run: npm test
-      # Build here too: a broken build should fail the PR, not the deploy.
+      # `npm run build` runs tsc first, so this covers typechecking too.
       - run: npm run build
