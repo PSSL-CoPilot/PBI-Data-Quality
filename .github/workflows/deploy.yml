@@ -41,19 +41,26 @@ jobs:
         run: npx tsc --noEmit
 
       # Without this the first failure would be an opaque wrangler auth error.
+      # D1 is optional: analysis runs entirely in the browser, so the app is
+      # usable without it and only version history is lost.
       - name: Check deploy credentials
+        id: creds
         run: |
           missing=""
           [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
           [ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
-          [ -n "${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}" ] || missing="$missing CLOUDFLARE_D1_DATABASE_ID"
           if [ -n "$missing" ]; then
-            echo "::error::Missing repository secret(s):$missing"
+            echo "::error::Missing required repository secret(s):$missing"
             echo "Add them under Settings > Secrets and variables > Actions." >&2
             echo "See the Deploying section of README.md for how to obtain each one." >&2
             exit 1
           fi
-          echo "All deploy credentials are present."
+          if [ -n "${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}" ]; then
+            echo "d1=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "d1=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLOUDFLARE_D1_DATABASE_ID is not set. Deploying without a database: analysis works, version history does not."
+          fi
 
       - name: Build
         run: npm run build
@@ -64,10 +71,12 @@ jobs:
       # `migrations_dir` in the generated config is relative to the config file,
       # which the build writes to dist/server, so the SQL has to sit beside it.
       - name: Stage migrations next to the built config
+        if: steps.creds.outputs.d1 == 'true'
         run: cp -r drizzle dist/server/drizzle
 
       # Applies only migrations that have not run yet; safe to repeat.
       - name: Apply D1 migrations
+        if: steps.creds.outputs.d1 == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -68,9 +68,12 @@ It needs four one-time setup steps:
 2. Create a Cloudflare API token with **Workers Scripts: Edit**, **D1: Edit** and
    **Workers R2/KV** not required.
 3. Add repository secrets under Settings → Secrets and variables → Actions:
-   - `CLOUDFLARE_API_TOKEN`
-   - `CLOUDFLARE_ACCOUNT_ID`
-   - `CLOUDFLARE_D1_DATABASE_ID` (from step 1)
+   - `CLOUDFLARE_API_TOKEN` (required)
+   - `CLOUDFLARE_ACCOUNT_ID` (required)
+   - `CLOUDFLARE_D1_DATABASE_ID` (optional, from step 1)
+
+   D1 is optional. Extraction and QA run entirely in the browser, so without a
+   database the app works and only version history is unavailable.
 4. Optionally add the repository variable `CLOUDFLARE_D1_DATABASE_NAME`
    (defaults to `pbi-quality-studio`).
 
