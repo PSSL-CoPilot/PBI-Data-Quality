@@ -40,6 +40,21 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Without this the first failure would be an opaque wrangler auth error.
+      - name: Check deploy credentials
+        run: |
+          missing=""
+          [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -n "${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}" ] || missing="$missing CLOUDFLARE_D1_DATABASE_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            echo "Add them under Settings > Secrets and variables > Actions." >&2
+            echo "See the Deploying section of README.md for how to obtain each one." >&2
+            exit 1
+          fi
+          echo "All deploy credentials are present."
+
       - name: Build
         run: npm run build
         env:
