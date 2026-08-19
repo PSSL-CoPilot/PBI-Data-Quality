@@ -16,3 +16,25 @@
 .scoreNote{font-size:9px;color:var(--muted);margin:10px 0 0;line-height:1.6}
 .notAssessed li{font-size:10px;color:#6e6976;margin:6px 0}
 .bars>div>b>i.dim{background:#d9d5e4}
+
+/* --- Optimization: rewrites, impact and page complexity (slice 3) --- */
+.rewrite{border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0 0}
+.rewriteHead{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
+.rewriteHead b{font-size:11px;margin-right:auto}
+.rewriteGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rewriteGrid .codeLabel{display:block;font-size:8px;letter-spacing:.13em;color:#9b97a4;font-weight:bold;margin-bottom:5px}
+.rewriteGrid pre{margin:0;max-height:230px;overflow:auto}
+.rewriteGrid .after pre{background:#f2fbf5;border-color:#cbe8d6}
+.badge{font-size:8px;padding:4px 8px;border-radius:20px;background:#f1eefc;color:#6a5cc4}
+.badge.warn{background:#fbeede;color:#a97037}
+.badge.flat{background:#eef1f6;color:#5d6b80}
+.rewriteNote{font-size:9px;color:#797481;margin:10px 0 0;line-height:1.6}
+.rewriteNote b{color:#a97037}
+.impactRow{display:grid;grid-template-columns:47px 1fr;gap:10px;padding:12px 0;border-top:1px solid #eeebf1}
+.complexity{width:100%;border-collapse:collapse;font-size:10px}
+.complexity th{text-align:left;font-size:8px;letter-spacing:.1em;color:#9b97a4;padding:8px 6px;border-bottom:1px solid var(--line)}
+.complexity td{padding:9px 6px;border-bottom:1px solid #f4f2f7}
+.meter{position:relative;height:6px;border-radius:10px;background:#efedf3;overflow:hidden;min-width:70px}
+.meter i{display:block;height:100%;border-radius:10px;background:linear-gradient(90deg,#8fd6ab,#e0b877)}
+.meter i.hot{background:linear-gradient(90deg,#e0b877,#d1786a)}
+@media(max-width:900px){.rewriteGrid{grid-template-columns:1fr}}

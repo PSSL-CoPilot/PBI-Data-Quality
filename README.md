@@ -40,6 +40,21 @@ PBIX shows "—" for DAX, not 100. Checks that would need a live query engine
 (row counts, cardinality, render timings) are listed as out of scope rather
 than silently omitted.
 
+### Optimization
+
+20 rules across DAX, Model, Relationship and Visual optimization produce an
+optimization score per category, opportunities ranked by impact, and a **page
+complexity score** whose contributions are all shown so the number can be
+argued with.
+
+Where a rewrite can be generated mechanically and then validated, the
+opportunity carries **Current DAX → Suggested DAX** with its reason,
+recommendation, impact and confidence. Everything else stays advice without
+generated code.
+
+Nothing is ever executed or timed, so no rewrite claims to be faster and
+performance hotspots are reported as *not assessed* rather than estimated.
+
 ### Version history
 
 A summary of each analysis (file name, hash, format, score, finding count) is
@@ -56,8 +71,8 @@ self-host Gotham, add your own `@font-face` rules in `src/globals.css`.
 
 ## Not built yet
 
-Optimization analysis and score, object editing, dependency-aware renames,
-change tracking, validation and export. Those views say so rather than showing
+Object editing, dependency-aware renames, change tracking, validation and
+export. Those views say so rather than showing
 placeholder content. See `docs/ARCHITECTURE.md`.
 
 ## Deploying

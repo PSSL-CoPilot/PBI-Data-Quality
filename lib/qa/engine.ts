@@ -6,7 +6,8 @@
  * categories that were actually assessed. A category whose rules could not run
  * scores `null`, not 100 — an unread model must never look like a clean one.
  */
-import type { Capability, CapabilityId, Model } from "../powerbi/model.ts";
+import type { Model } from "../powerbi/model.ts";
+import { categoryScore, missingCapability, overallScore } from "../scoring.ts";
 import {
   ALL_RULES,
   CATEGORIES,
@@ -67,19 +68,6 @@ export interface QaResult {
   notAssessed: typeof NOT_ASSESSED;
 }
 
-function missingCapability(
-  model: Model,
-  requires: CapabilityId[]
-): { id: CapabilityId; capability: Capability } | undefined {
-  for (const id of requires) {
-    const capability = model.capabilities[id];
-    if (!capability.available) return { id, capability };
-  }
-  return undefined;
-}
-
-const clamp = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
-
 export function runQa(model: Model, rules: Rule[] = ALL_RULES): QaResult {
   const findings: Finding[] = [];
   const skipped: SkippedRule[] = [];
@@ -90,7 +78,7 @@ export function runQa(model: Model, rules: Rule[] = ALL_RULES): QaResult {
   for (const rule of rules) {
     const missing = missingCapability(model, rule.requires);
     if (missing) {
-      const reason = (missing.capability as { available: false; reason: string }).reason;
+      const reason = missing.reason;
       skipped.push({ ruleId: rule.id, title: rule.title, category: rule.category, reason });
       skippedByCategory.set(rule.category, (skippedByCategory.get(rule.category) ?? 0) + 1);
       if (!reasonByCategory.has(rule.category)) reasonByCategory.set(rule.category, reason);
@@ -120,7 +108,7 @@ export function runQa(model: Model, rules: Rule[] = ALL_RULES): QaResult {
 
     return {
       category,
-      score: rulesRun === 0 ? null : clamp(100 - deductions),
+      score: categoryScore(rulesRun, deductions),
       rulesRun,
       rulesSkipped: skippedByCategory.get(category) ?? 0,
       findings: categoryFindings.length,
@@ -129,10 +117,7 @@ export function runQa(model: Model, rules: Rule[] = ALL_RULES): QaResult {
     };
   });
 
-  const assessed = categories.filter((c) => c.score !== null);
-  const overall = assessed.length
-    ? clamp(assessed.reduce((sum, c) => sum + (c.score ?? 0), 0) / assessed.length)
-    : null;
+  const overall = overallScore(categories.map((c) => c.score));
 
   const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const finding of findings) counts[finding.severity]++;

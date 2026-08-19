@@ -24,6 +24,13 @@ import {
   type QaResult,
   type Severity,
 } from "../lib/qa/engine.ts";
+import {
+  optimizationLabel,
+  runOptimization,
+  type OptimizationResult,
+} from "../lib/optimize/engine.ts";
+import { Optimization } from "./Optimization.tsx";
+import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
 
 type View =
   | "Overview"
@@ -33,6 +40,7 @@ type View =
   | "Relationships"
   | "Dependencies"
   | "Quality Checks"
+  | "Optimization"
   | "Issues"
   | "Team"
   | "Project Settings";
@@ -45,11 +53,12 @@ const NAV: View[] = [
   "Relationships",
   "Dependencies",
   "Quality Checks",
+  "Optimization",
   "Issues",
   "Team",
   "Project Settings",
 ];
-const ICONS = ["◫", "▤", "▦", "ƒ", "⌁", "⌘", "✓", "!", "♙", "⚙"];
+const ICONS = ["◫", "▤", "▦", "ƒ", "⌁", "⌘", "✓", "◎", "!", "♙", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
 const NEEDS_MODEL: View[] = ["Tables", "Measures", "Relationships", "Dependencies"];
@@ -79,8 +88,10 @@ export default function App() {
   const [upload, setUpload] = useState(false);
   const [notice, setNotice] = useState("");
 
-  // QA is a pure function of the model, so it needs no separate "run" state.
+  // QA and optimization are pure functions of the model, so neither needs a
+  // separate "run" state; both recompute when a new file is analyzed.
   const qa = useMemo(() => (model ? runQa(model) : null), [model]);
+  const opt = useMemo(() => (model ? runOptimization(model) : null), [model]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -157,6 +168,9 @@ export default function App() {
               {view === "Quality Checks" && qa && qa.findings.length > 0 && (
                 <em>{qa.findings.length}</em>
               )}
+              {view === "Optimization" && opt && opt.opportunities.length > 0 && (
+                <em>{opt.opportunities.length}</em>
+              )}
             </button>
           ))}
         </nav>
@@ -166,6 +180,15 @@ export default function App() {
             <span>
               <b>Quality score</b>
               <small>{scoreLabel(qa.overall)}</small>
+            </span>
+          </div>
+        )}
+        {opt && (
+          <div className="health" style={{ marginTop: 8 }}>
+            <div>{opt.overall ?? "—"}</div>
+            <span>
+              <b>Optimization</b>
+              <small>{optimizationLabel(opt.overall)}</small>
             </span>
           </div>
         )}
@@ -204,10 +227,10 @@ export default function App() {
             </div>
           </div>
 
-          {!model || !qa ? (
+          {!model || !qa || !opt ? (
             <EmptyState onUpload={() => setUpload(true)} />
           ) : (
-            <Views view={active} model={model} qa={qa} focus={focus} goTo={goTo} />
+            <Views view={active} model={model} qa={qa} opt={opt} focus={focus} goTo={goTo} />
           )}
         </div>
       </section>
@@ -264,6 +287,7 @@ function CapabilityNotice({ capability, label }: { capability: Capability; label
 interface ViewProps {
   model: Model;
   qa: QaResult;
+  opt: OptimizationResult;
   focus: Focus;
   goTo: (target: FindingTarget) => void;
 }
@@ -285,6 +309,8 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
       return <Overview {...props} />;
     case "Quality Checks":
       return <QualityChecks {...props} />;
+    case "Optimization":
+      return <Optimization opt={props.opt} goTo={props.goTo} />;
     case "Report Pages":
       return <Pages model={model} focus={props.focus} />;
     case "Tables":
@@ -311,51 +337,6 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
 
 /** Changing this remounts an explorer, which reopens it on the focused object. */
 const focusKey = (focus: Focus) => (focus ? `${focus.type}:${focus.table ?? ""}:${focus.name}` : "none");
-
-function Head({ over, title, action }: { over: string; title: string; action?: string }) {
-  return (
-    <div className="head">
-      <div>
-        <small>{over}</small>
-        <h3>{title}</h3>
-      </div>
-      {action ? <button>{action}</button> : null}
-    </div>
-  );
-}
-
-function ScoreRing({ score }: { score: number | null }) {
-  return (
-    <div
-      className={score === null ? "ring none" : "ring"}
-      style={{ "--pct": score ?? 0 } as React.CSSProperties}
-    >
-      <span>
-        <b>{score ?? "—"}</b>
-        <small>{score === null ? "not assessed" : "/ 100"}</small>
-      </span>
-    </div>
-  );
-}
-
-function CategoryBars({ qa }: { qa: QaResult }) {
-  return (
-    <div className="bars">
-      {qa.categories.map((category) => (
-        <div key={category.category} title={category.reason ?? ""}>
-          <span>{category.category}</span>
-          <b>
-            <i
-              className={category.score === null ? "dim" : ""}
-              style={{ width: `${category.score ?? 100}%` }}
-            />
-          </b>
-          <em>{category.score ?? "—"}</em>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function FindingRow({ finding, goTo }: { finding: Finding; goTo: (t: FindingTarget) => void }) {
   const open = () => goTo(finding.target);
@@ -445,7 +426,13 @@ function Overview({ model, qa, goTo }: ViewProps) {
               </p>
             </div>
           </div>
-          <CategoryBars qa={qa} />
+          <ScoreBars
+          bars={qa.categories.map((c) => ({
+            label: c.category,
+            score: c.score,
+            reason: c.reason,
+          }))}
+        />
         </article>
 
         <article className="card">
@@ -528,7 +515,13 @@ function QualityChecks({ qa, goTo }: ViewProps) {
             </p>
           </div>
         </div>
-        <CategoryBars qa={qa} />
+        <ScoreBars
+          bars={qa.categories.map((c) => ({
+            label: c.category,
+            score: c.score,
+            reason: c.reason,
+          }))}
+        />
 
         <div className="counts">
           {SEVERITY_ORDER.map((level) => (

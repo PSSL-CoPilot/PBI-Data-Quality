@@ -52,7 +52,14 @@ rewrite that silently dropped it would change the file.
       dax.ts      Comment- and string-aware DAX text analysis.
       rules.ts    The rule catalogue; each rule declares what it needs.
       engine.ts   Runner and scoring.
-    lib/history.ts  Version-history summaries in localStorage.
+    lib/optimize/
+      rewrite.ts  Validated Current DAX -> Suggested DAX rewrites.
+      rules.ts    Optimization opportunities, by category.
+      pages.ts    Additive page complexity scoring.
+      engine.ts   Runner and optimization score.
+    lib/powerbi/graph.ts  Dependency index: what uses what.
+    lib/scoring.ts        Score primitives shared by both engines.
+    lib/history.ts        Version-history summaries in localStorage.
 
 Adding a source format means adding one adapter that produces a `Model`. Nothing
 downstream of `model.ts` changes.
@@ -84,9 +91,20 @@ quality precisely because no DAX could be read.
 Text scans strip comments and string literals before matching, so `-- 50/50`
 in a comment does not report an unsafe division. That is checked by test.
 
+## Rewriting DAX
+
+A rewrite is only emitted when it can be produced mechanically and then
+validated: brackets balanced, and every reference still present. The division
+rewrite additionally requires the slash to be unambiguously the root operator,
+because `a - b / c` means `a - (b / c)` and splitting on the slash would
+silently produce a different number. That case is pinned by a test.
+
+Everything subtler is reported as advice with no generated code. Nothing is
+executed, so `impact` states what changes structurally and every rewrite is
+labelled as not benchmarked.
+
 ## Not yet built
 
-- Optimization analysis and score.
 - Object editing, dependency-aware rename, change workspace, diff, validation.
 - Export of a modified `.pbit` / `.pbip`.
 - TMDL parsing, so PBIP projects that use `definition/*.tmdl` instead of
