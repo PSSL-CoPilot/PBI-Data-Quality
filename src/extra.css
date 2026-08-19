@@ -38,3 +38,11 @@
 .meter i{display:block;height:100%;border-radius:10px;background:linear-gradient(90deg,#8fd6ab,#e0b877)}
 .meter i.hot{background:linear-gradient(90deg,#e0b877,#d1786a)}
 @media(max-width:900px){.rewriteGrid{grid-template-columns:1fr}}
+
+/* --- Prominent notice when the uploaded file hid its model --- */
+.limitBanner{display:flex;gap:14px;align-items:flex-start;margin:22px 0 0;padding:16px 18px;border:1px solid #f0d8b8;border-radius:14px;background:#fdf6ec}
+.limitBanner>span{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;background:#f4e0c2;color:#a2622a;font-weight:bold}
+.limitBanner h3{margin:0 0 6px;font-size:13px;color:#7d4f22}
+.limitBanner p{margin:0 0 8px;font-size:10px;line-height:1.6;color:#7a6a58}
+.limitBanner b{color:#6d4519}
+.limitBanner code{padding:2px 6px;border-radius:5px;background:#f4e6d2;font-size:10px}

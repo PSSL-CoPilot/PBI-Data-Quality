@@ -124,7 +124,10 @@ export function Optimization({
         <div className="qualityTop">
           <ScoreRing score={opt.overall} />
           <div>
-            <i>{optimizationLabel(opt.overall)}</i>
+            <i>
+              {optimizationLabel(opt.overall)}
+              {opt.skipped.length > 0 && " · partial"}
+            </i>
             <h3>Optimization score</h3>
             <p>
               Structural only. Nothing is executed against the model, so no timing or size

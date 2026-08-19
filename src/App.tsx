@@ -227,6 +227,8 @@ export default function App() {
             </div>
           </div>
 
+          {model && <ModelUnavailableBanner model={model} />}
+
           {!model || !qa || !opt ? (
             <EmptyState onUpload={() => setUpload(true)} />
           ) : (
@@ -271,6 +273,26 @@ function EmptyState({ onUpload }: { onUpload: () => void }) {
         ↑ Upload Power BI file
       </button>
     </article>
+  );
+}
+
+function ModelUnavailableBanner({ model }: { model: Model }) {
+  const capability = model.capabilities.model;
+  if (capability.available) return null;
+
+  return (
+    <div className="limitBanner">
+      <span>!</span>
+      <div>
+        <h3>This file exposed its report, but not its model</h3>
+        <p>{capability.reason}</p>
+        <p>
+          <b>To get measures, DAX, columns and relationships:</b> open the file in Power BI
+          Desktop and choose <code>File → Export → Power BI template (.pbit)</code>, then upload
+          that instead. It takes a few seconds and produces a full analysis.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -414,7 +436,10 @@ function Overview({ model, qa, goTo }: ViewProps) {
           <div className="qualityTop">
             <ScoreRing score={qa.overall} />
             <div>
-              <i>{scoreLabel(qa.overall)}</i>
+              <i>
+                {scoreLabel(qa.overall)}
+                {qa.skipped.length > 0 && " · partial"}
+              </i>
               <h3>
                 {qa.findings.length} finding{qa.findings.length === 1 ? "" : "s"}
               </h3>
@@ -1078,9 +1103,14 @@ function Upload({
         findings: qa.findings.length,
       });
 
+      const scope = model.capabilities.model.available
+        ? "model and report"
+        : "report layer only, model not readable";
       onAnalyzed(
         model,
-        `Analyzed ${model.source.fileName}${stored ? "" : " (history not saved: browser storage unavailable)"}`
+        `Analyzed ${model.source.fileName} — ${scope}${
+          stored ? "" : " (history not saved)"
+        }`
       );
     } catch (err) {
       setError({
