@@ -1,7 +1,7 @@
 /* eslint-disable jsx-a11y/label-has-associated-control, jsx-a11y/no-autofocus */
 import { useEffect, useMemo, useState } from "react";
 
-import { ExtractionError, extractFile } from "../lib/powerbi/extract.ts";
+import { ExtractionError, extractFile, type RawSources } from "../lib/powerbi/extract.ts";
 import { listVersions, saveVersion } from "../lib/history.ts";
 import type {
   Capability,
@@ -97,6 +97,8 @@ type Focus = { type: ObjectType; name: string; table?: string; page?: string } |
 export default function App() {
   const [active, setActive] = useState<View>("Overview");
   const [session, setSession] = useState<EditSession | null>(null);
+  // The original archive and its parsed documents, needed to write an export.
+  const [raw, setRaw] = useState<RawSources | null>(null);
   const [focus, setFocus] = useState<Focus>(null);
   const [search, setSearch] = useState(false);
   const [upload, setUpload] = useState(false);
@@ -124,8 +126,9 @@ export default function App() {
     return () => removeEventListener("keydown", onKey);
   }, []);
 
-  const analyzed = (next: Model, message: string) => {
+  const analyzed = (next: Model, sources: RawSources, message: string) => {
     setSession(newSession(next));
+    setRaw(sources);
     setFocus(null);
     setUpload(false);
     setActive("Overview");
@@ -261,6 +264,7 @@ export default function App() {
               opt={opt}
               session={session}
               working={working}
+              raw={raw}
               focus={focus}
               goTo={goTo}
               onApply={(changes) => {
@@ -355,6 +359,7 @@ interface ViewProps {
   opt: OptimizationResult;
   session: EditSession;
   working: ReturnType<typeof workingModel>;
+  raw: RawSources | null;
   focus: Focus;
   goTo: (target: FindingTarget) => void;
   onApply: (changes: Change[]) => void;
@@ -387,6 +392,7 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
         <Changes
           session={props.session}
           working={props.working}
+          raw={props.raw}
           onUndo={props.onUndo}
           onRevert={props.onRevert}
           onRevertAll={props.onRevertAll}
@@ -1282,7 +1288,7 @@ function Upload({
   onAnalyzed,
 }: {
   close: () => void;
-  onAnalyzed: (model: Model, message: string) => void;
+  onAnalyzed: (model: Model, raw: RawSources, message: string) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1295,7 +1301,7 @@ function Upload({
     setBusy(true);
     setError(null);
     try {
-      const { model, sha256 } = await extractFile(file);
+      const { model, raw, sha256 } = await extractFile(file);
       const qa = runQa(model);
 
       // Storage can be unavailable in private mode, which must not lose the
@@ -1314,6 +1320,7 @@ function Upload({
         : "report layer only, model not readable";
       onAnalyzed(
         model,
+        raw,
         `Analyzed ${model.source.fileName} — ${scope}${
           stored ? "" : " (history not saved)"
         }`

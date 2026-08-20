@@ -63,6 +63,9 @@ rewrite that silently dropped it would change the file.
       apply.ts      Applying one change to a copy of the model, plus preview.
       session.ts    Change list, working model, validation.
       diff.ts       Line diff for the before/after view.
+    lib/export/
+      writer.ts     Replays the change list onto the original documents.
+      pbit.ts       Repacks the archive and verifies what it produced.
     lib/scoring.ts        Score primitives shared by both engines.
     lib/history.ts        Version-history summaries in localStorage.
 
@@ -126,9 +129,27 @@ variable name, so the rename reports it for manual review instead of editing it.
 Validation then re-runs the reference-integrity QA rules and reports only
 problems the edits introduced, not pre-existing ones.
 
-## Not yet built
+## Export
 
-- Writing changes back into a .pbit or .pbip file, dependency-aware rename, change workspace, diff, validation.
+Export does **not** serialize the normalized model. That model deliberately
+drops everything this build does not understand — annotations, lineage tags,
+formatting hints, visual layout — so writing it back would silently delete all
+of it. Instead the same change list is replayed onto the parsed *original*
+documents, touching only the fields each change names, and the archive is
+repacked from the original bytes with just those two parts replaced.
+
+Report bindings name a field in several coordinated places: the `Property` on
+the reference, a `Table.Field` composite used as the query name, and the
+`queryRef` a visual role points at. All move together. Only structural
+identifier keys are rewritten; captions such as `NativeReferenceName` and visual
+titles are left alone, since they are wording rather than references.
+
+The result is then re-opened and re-validated before being offered. If a
+renamed object is missing, or a new broken reference appeared, the export
+returns the reason and no bytes. "It probably worked" is not a state it can
+return.
+
+## Not yet built, dependency-aware rename, change workspace, diff, validation.
 - Export of a modified `.pbit` / `.pbip`.
 - TMDL parsing, so PBIP projects that use `definition/*.tmdl` instead of
   `model.bim` are detected and refused with an explanation.

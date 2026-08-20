@@ -25,6 +25,13 @@ export type SourceFormat = Model["source"]["format"];
  */
 export interface RawSources {
   parts: ZipParts;
+  /**
+   * The whole uploaded archive, retained only when the model is readable and
+   * therefore exportable. Repacking needs every part, including the ones this
+   * build never parses, and a report-only PBIX cannot be exported anyway, so
+   * its bytes (often over 100 MB) are not held.
+   */
+  sourceBytes?: Uint8Array;
   modelSchemaPath?: string;
   modelSchema?: unknown;
   modelSchemaBom: boolean;
@@ -227,6 +234,8 @@ export async function extract(fileName: string, bytes: Uint8Array): Promise<Extr
           ),
     runtime: unavailable(RUNTIME_REASON),
   };
+
+  if (modelCapability.available) raw.sourceBytes = bytes;
 
   return {
     model: {

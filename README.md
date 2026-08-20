@@ -72,6 +72,21 @@ The **Changes** view shows each edit with an Original/Modified diff, the
 quality and optimization scores before and after, and any broken references the
 edits introduced.
 
+### Export
+
+Changes can be written back into an updated `.pbit` / `.pbip`. The original
+archive is repacked with only the two changed documents replaced, so annotations,
+lineage tags, diagram layout, themes and static resources all survive untouched.
+
+The exported file is then **re-opened and re-validated before it is offered**.
+If a renamed object is missing, or the round trip introduced a broken reference,
+you get the reason instead of a download. The export is named
+`<original> (edited).pbit` so it can never overwrite your file.
+
+Open the result in Power BI Desktop and save as `.pbix` from there. Writing a
+`.pbix` directly is not possible for the same reason reading one is not: its
+model is a binary Analysis Services part.
+
 ### Version history
 
 A summary of each analysis (file name, hash, format, score, finding count) is
@@ -86,11 +101,17 @@ redistributed here. It is used when installed on the machine; otherwise the
 stack falls back to Montserrat, the closest freely available geometric sans. To
 self-host Gotham, add your own `@font-face` rules in `src/globals.css`.
 
-## Not built yet
+## Known limits
 
-Export. Changes live in the session only: writing them back into a .pbit or
-.pbip file is the next stage, so nothing is downloadable yet and your uploaded
-file is never touched. Those views say so rather than showing
+- `.pbix` files are analyzed at the report layer only and cannot be edited or
+  exported, because their model is not readable outside Power BI Desktop.
+- A rename updates structural identifiers, not captions. If a visual title was
+  typed as "Cross Sales", it stays that way after renaming the measure, exactly
+  as Power BI Desktop leaves custom titles alone.
+- A table passed unqualified to FILTER or ALL is flagged for manual review
+  rather than rewritten, because the same token can be a variable name.
+- PBIP projects using TMDL (`definition/*.tmdl`) are detected and refused;
+  only `model.bim` projects are supported. Those views say so rather than showing
 placeholder content. See `docs/ARCHITECTURE.md`.
 
 ## Deploying

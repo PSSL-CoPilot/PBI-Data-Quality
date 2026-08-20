@@ -16,6 +16,8 @@ import {
   type EditSession,
   type WorkingState,
 } from "../lib/edit/session.ts";
+import { downloadBytes, exportUpdatedFile, type ExportResult } from "../lib/export/pbit.ts";
+import type { RawSources } from "../lib/powerbi/extract.ts";
 import type { Model } from "../lib/powerbi/model.ts";
 import { runQa } from "../lib/qa/engine.ts";
 import { runOptimization } from "../lib/optimize/engine.ts";
@@ -67,15 +69,121 @@ function ScoreDelta({ label, before, after }: { label: string; before: number | 
   );
 }
 
+function ExportPanel({
+  session,
+  raw,
+}: {
+  session: EditSession;
+  raw: RawSources | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<ExportResult | null>(null);
+
+  const exportable = Boolean(raw?.sourceBytes);
+  const format = session.original.source.format === "pbip" ? "PBIP project" : "PBIT template";
+
+  const run = async () => {
+    if (!raw) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const outcome = await exportUpdatedFile(raw, session.original, session.changes);
+      setResult(outcome);
+      // Only hand over a file that was re-opened and verified.
+      if (outcome.ok && outcome.bytes && outcome.fileName) {
+        downloadBytes(outcome.bytes, outcome.fileName);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <article className="card" style={{ marginTop: 14 }}>
+      <Head over="EXPORT" title={`Download updated ${format}`} />
+
+      {!exportable ? (
+        <div className="unavailable">
+          <b>This file cannot be exported</b>
+          <p>
+            Only files whose model could be read are exportable. A .pbix keeps its model in a
+            binary Analysis Services part, so there is nothing to write changes into.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="scoreNote">
+            The original archive is repacked with only the changed documents replaced, so
+            everything this build does not parse is carried across untouched. The result is then
+            re-opened and re-validated before it is offered; if that check fails you get the
+            reason instead of a file.
+          </p>
+
+          <div className="editActions">
+            <button className="go" onClick={run} disabled={busy || session.changes.length === 0}>
+              {busy ? "Validating…" : `Validate and download`}
+            </button>
+            <span className="spacer">
+              {session.changes.length} change{session.changes.length === 1 ? "" : "s"} to write
+            </span>
+          </div>
+
+          {result && !result.ok && (
+            <div className="unavailable" style={{ marginTop: 12 }}>
+              <b>Export refused — the file was not produced</b>
+              {result.problems.map((problem) => (
+                <p key={problem}>{problem}</p>
+              ))}
+            </div>
+          )}
+
+          {result?.ok && result.verified && (
+            <div className="preview" style={{ marginTop: 12 }}>
+              <h4>Verified and downloaded: {result.fileName}</h4>
+              <div className="usedIn">
+                <div>
+                  <b>{result.verified.tables}</b>
+                  <small>tables</small>
+                </div>
+                <div>
+                  <b>{result.verified.measures}</b>
+                  <small>measures</small>
+                </div>
+                <div>
+                  <b>{result.verified.pages}</b>
+                  <small>report pages</small>
+                </div>
+                <div>
+                  <b>{result.verified.renamedObjectsFound.length}</b>
+                  <small>renames confirmed</small>
+                </div>
+              </div>
+              <p className="scoreNote" style={{ margin: 0 }}>
+                The exported file was re-opened and checked: every renamed object is present and
+                no new broken references were introduced. Open it in Power BI Desktop
+                {session.original.source.format === "pbit"
+                  ? " and save as .pbix from there."
+                  : "."}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+    </article>
+  );
+}
+
 export function Changes({
   session,
   working,
+  raw,
   onUndo,
   onRevert,
   onRevertAll,
 }: {
   session: EditSession;
   working: WorkingState;
+  raw: RawSources | null;
   onUndo: () => void;
   onRevert: (changeId: string) => void;
   onRevertAll: () => void;
@@ -189,14 +297,7 @@ export function Changes({
         </div>
       </article>
 
-      <article className="card" style={{ marginTop: 14 }}>
-        <Head over="EXPORT" title="Not built yet" />
-        <p className="scoreNote">
-          These changes exist in this session only. Writing them back into a .pbit or .pbip file
-          is the next stage of this build, so nothing here has modified your file and nothing can
-          be downloaded yet.
-        </p>
-      </article>
+      <ExportPanel session={session} raw={raw} />
     </>
   );
 }
