@@ -179,4 +179,65 @@ export function timeIntelligenceUsed(expression: string): string[] {
   return TIME_INTELLIGENCE.filter((fn) => callPattern(fn).test(text));
 }
 
+/**
+ * How often each known table is referenced, counting both `Table[Column]`
+ * qualifiers and bare table arguments such as `COUNTROWS ( Orders )`.
+ *
+ * Bare identifiers are only counted when they match a table that actually
+ * exists, which keeps variable names and function names out of the tally.
+ */
+export function tableReferenceCounts(
+  expression: string,
+  knownTables: Iterable<string>
+): Map<string, number> {
+  const known = new Set(knownTables);
+  const counts = new Map<string, number>();
+  const bump = (name: string) => counts.set(name, (counts.get(name) ?? 0) + 1);
+
+  const text = stripComments(expression);
+
+  // A variable declared with the same name as a table shadows it, so exclude
+  // those names rather than counting `VAR Orders = 1 RETURN Orders` as two
+  // references to the Orders table.
+  const shadowed = new Set(
+    [...text.matchAll(/\bVAR\s+([A-Za-z_]\w*)/gi)].map((m) => m[1])
+  );
+
+
+  let i = 0;
+
+  while (i < text.length) {
+    if (text[i] === '"') {
+      // String literals are already blanked by stripComments.
+      i++;
+      continue;
+    }
+
+    if (text[i] === "'") {
+      const end = text.indexOf("'", i + 1);
+      if (end === -1) break;
+      const name = text.slice(i + 1, end);
+      if (known.has(name)) bump(name);
+      i = end + 1;
+      continue;
+    }
+
+    const identifier = /^[A-Za-z_]\w*/.exec(text.slice(i));
+    if (identifier) {
+      const token = identifier[0];
+      // `SUM (` is a function call, not a table; a table is followed by `[` or
+      // by a comma/paren when passed as a table argument.
+      const rest = text.slice(i + token.length);
+      const isCall = /^\s*\(/.test(rest);
+      if (known.has(token) && !isCall && !shadowed.has(token)) bump(token);
+      i += token.length;
+      continue;
+    }
+
+    i++;
+  }
+
+  return counts;
+}
+
 export const lineCount = (expression: string): number => expression.split(/\r?\n/).length;

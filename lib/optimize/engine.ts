@@ -9,6 +9,7 @@
  * here. `Performance` is reported as a category that was not assessed rather
  * than being estimated from structure.
  */
+import type { Change } from "../edit/apply.ts";
 import type { Model } from "../powerbi/model.ts";
 import { buildDependencyIndex } from "../powerbi/graph.ts";
 import { categoryScore, missingCapability, overallScore } from "../scoring.ts";
@@ -157,6 +158,45 @@ export function runOptimization(
     rewrites: opportunities.filter((o) => o.rewrite),
     performanceNotAssessed: PERFORMANCE_NOT_ASSESSED,
   };
+}
+
+/**
+ * Turn an opportunity into an editable change, when and only when it carries a
+ * validated rewrite.
+ *
+ * Advisory findings return nothing, which is what keeps "Optimize" off the
+ * recommendations that cannot be applied mechanically. The caller supplies the
+ * id so the change can be traced back to the click that made it.
+ */
+export function rewriteAsChange(
+  opportunity: Opportunity,
+  id: string,
+  at: number
+): Change | undefined {
+  const rewrite = opportunity.rewrite;
+  if (!rewrite) return undefined;
+  if (opportunity.target.type !== "measure" || !opportunity.target.table) return undefined;
+
+  return {
+    id,
+    target: {
+      type: "measure",
+      table: opportunity.target.table,
+      name: opportunity.target.name,
+    },
+    field: "expression",
+    before: rewrite.original,
+    after: rewrite.suggested,
+    at,
+  };
+}
+
+/** Opportunities that can be applied automatically, safest first. */
+export function safeRewrites(result: OptimizationResult): Opportunity[] {
+  const rank = { high: 0, medium: 1, low: 2 } as const;
+  return result.rewrites
+    .filter((o) => o.rewrite && o.target.type === "measure" && o.target.table)
+    .sort((a, b) => rank[a.rewrite!.confidence] - rank[b.rewrite!.confidence]);
 }
 
 export function optimizationLabel(score: number | null): string {

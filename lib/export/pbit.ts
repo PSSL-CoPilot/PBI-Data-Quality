@@ -44,7 +44,7 @@ function encodePart(
   const text = JSON.stringify(value);
   return encoding === "utf-16le"
     ? encodeUtf16(text, withBom)
-    : encodeUtf8(withBom ? "﻿" + text : text);
+    : encodeUtf8(withBom ? "\uFEFF" + text : text);
 }
 
 /** Rename the file so an export never overwrites the user's original. */

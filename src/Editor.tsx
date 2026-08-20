@@ -10,6 +10,7 @@
 import { useMemo, useState } from "react";
 
 import { previewRename, type Change, type EditTarget } from "../lib/edit/session.ts";
+import { CodeEditor, type CodeLanguage } from "./CodeEditor.tsx";
 import type { Column, Measure, Model, Partition, Table } from "../lib/powerbi/model.ts";
 
 interface FieldSpec {
@@ -17,6 +18,8 @@ interface FieldSpec {
   label: string;
   value: string;
   kind?: "text" | "code" | "select";
+  /** Which highlighter a code field gets. */
+  language?: CodeLanguage;
   options?: string[];
   /** Renames need the dependency preview; other fields do not. */
   isRename?: boolean;
@@ -152,11 +155,11 @@ function EditForm({
         <div key={spec.field} className={values[spec.field] !== spec.value ? "dirty" : ""}>
           <label htmlFor={`edit-${spec.field}`}>{spec.label.toUpperCase()}</label>
           {spec.kind === "code" ? (
-            <textarea
-              id={`edit-${spec.field}`}
-              spellCheck={false}
+            <CodeEditor
               value={values[spec.field]}
-              onChange={(e) => setValues({ ...values, [spec.field]: e.target.value })}
+              language={spec.language ?? "dax"}
+              label={spec.label}
+              onChange={(next) => setValues((current) => ({ ...current, [spec.field]: next }))}
             />
           ) : spec.kind === "select" ? (
             <select
@@ -222,7 +225,13 @@ export function MeasureEditor({
       target={{ type: "measure", table: measure.table, name: measure.name }}
       specs={[
         { field: "name", label: "Measure name", value: measure.name, isRename: true },
-        { field: "expression", label: "DAX expression", value: measure.expression, kind: "code" },
+        {
+          field: "expression",
+          label: "DAX expression",
+          value: measure.expression,
+          kind: "code",
+          language: "dax",
+        },
         { field: "formatString", label: "Format string", value: measure.formatString ?? "" },
         { field: "description", label: "Description", value: measure.description ?? "" },
         {
@@ -260,6 +269,7 @@ export function TableEditor({
       label: "Calculated table DAX",
       value: table.expression ?? "",
       kind: "code",
+      language: "dax",
     });
   }
 
@@ -296,6 +306,7 @@ export function ColumnEditor({
       label: "Calculated column DAX",
       value: column.expression ?? "",
       kind: "code",
+      language: "dax",
     });
   }
 
@@ -333,7 +344,14 @@ export function PartitionEditor({
       model={model}
       target={{ type: "partition", table: partition.table, name: partition.name }}
       specs={[
-        { field: "expression", label, value: partition.expression ?? "", kind: "code" },
+        {
+          field: "expression",
+          label,
+          value: partition.expression ?? "",
+          kind: "code",
+          // Native queries are SQL; everything else in a partition is M.
+          language: partition.sourceType === "query" ? "sql" : "m",
+        },
       ]}
       onApply={onApply}
       onCancel={onCancel}

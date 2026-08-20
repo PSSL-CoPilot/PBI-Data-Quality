@@ -94,3 +94,71 @@
 .delta i{font-style:normal;font-size:10px;margin-left:6px}
 .delta i.up{color:#3f8560}
 .delta i.down{color:#a9564a}
+
+/* --- Code editor, KPI hints and grouped measures (slice 6) --- */
+.codeShell{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:white;min-width:0}
+.codeShell.full{position:fixed;inset:16px;z-index:40;display:flex;flex-direction:column;box-shadow:0 30px 80px #1a152633}
+.codeBar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;background:#faf9fc;border-bottom:1px solid var(--line)}
+.codeBar b{font-size:9px;letter-spacing:.1em;color:#6e6976;text-transform:uppercase}
+.codeHint{margin-left:auto;font-size:9px;color:#a9a5b2}
+.codeBar button{height:26px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:white;font-size:9px;cursor:pointer;color:#5d5869}
+.codeBar button:hover{background:#f3f0fb;border-color:#d6cef2}
+.codeBody{overflow:auto;min-width:0}
+.codeShell.full .codeBody{flex:1;min-height:0}
+.cm-editor{height:100%}
+
+/* Measures view toggles and grouping */
+.viewToggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:white}
+.viewToggle button{height:32px;padding:0 14px;border:0;border-right:1px solid var(--line);background:white;font-size:11px;font-weight:600;color:#6e6976;cursor:pointer}
+.viewToggle button:last-child{border-right:0}
+.viewToggle button.on{background:var(--violet);color:white}
+.groupCard{margin-top:12px;border:1px solid var(--line);border-radius:14px;background:white;overflow:hidden}
+.groupHead{display:flex;align-items:center;gap:10px;width:100%;padding:13px 16px;border:0;background:white;cursor:pointer;text-align:left}
+.groupHead:hover{background:#faf9fc}
+.groupHead .caret{width:14px;color:var(--violet);font-size:10px}
+.groupHead b{font-size:12px;flex:1}
+.groupHead em{font-style:normal;font-size:9px;color:var(--muted)}
+.groupBody{border-top:1px solid var(--line);padding:6px 16px 14px}
+.measureRow{padding:12px 0;border-bottom:1px solid #f4f2f7}
+.measureRow:last-child{border-bottom:0}
+.measureTop{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.measureTop b{font-size:11px}
+.kpiTag{font-size:8px;padding:3px 8px;border-radius:20px;background:#eef6f1;color:#3f7a5c}
+.kpiTag.low{background:#f6f1e8;color:#8a6b3c}
+.srcTag{font-size:8px;padding:3px 8px;border-radius:20px;background:#eef1f6;color:#5d6b80}
+.measureMeta{margin-top:6px;font-size:9px;color:#797481;line-height:1.7}
+.measureActions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.measureActions button{height:27px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:white;font-size:10px;cursor:pointer}
+.measureActions .go{background:var(--violet);color:white;border-color:var(--violet)}
+.emptyNote{font-size:10px;color:var(--muted);padding:10px 0}
+
+/* --- Overflow containment: nothing may render outside the app shell --- */
+html,body{max-width:100%;overflow-x:hidden}
+.shell,.main,.content{min-width:0;max-width:100%}
+.main{overflow-x:hidden}
+.content{overflow-x:clip}
+/* Grid and flex children default to min-width:auto, which lets long code push
+   the whole page sideways. These reset that so scrolling happens inside. */
+.checks,.grid,.card,.checksWide,.ruleSummary,.explorer,.finding,.finding>div,
+.rewrite,.rewriteGrid,.rewriteGrid>div,.groupCard,.groupBody,.measureRow{min-width:0}
+.finding p,.finding small,.rewriteNote,.measureMeta{overflow-wrap:anywhere}
+.checks{grid-template-columns:repeat(3,minmax(0,1fr))}
+.grid{grid-template-columns:minmax(0,1.18fr) minmax(0,.82fr)}
+.explorer table{width:100%;table-layout:auto}
+.explorer td,.explorer th{overflow-wrap:anywhere}
+.tableScroll{overflow-x:auto;max-width:100%}
+.drawer{max-width:100%;overflow-x:hidden}
+.drawer pre,.card pre{max-width:100%;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Bulk optimize controls */
+.bulkBar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}
+.bulkBar button{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:white;font-size:11px;font-weight:600;cursor:pointer}
+.bulkBar .go{background:var(--violet);color:white;border-color:var(--violet)}
+.bulkBar button:disabled{opacity:.45;cursor:not-allowed}
+.bulkBar .spacer{margin-left:auto;font-size:9px;color:var(--muted)}
+.bulkNote{padding:10px 12px;border:1px solid #cbe8d6;border-radius:10px;background:#f2fbf5;font-size:10px;color:#3f7a5c;margin-bottom:10px}
+.rewriteHead .pick{display:flex;align-items:center;gap:8px;margin-right:auto;cursor:pointer}
+.rewriteHead .pick input{width:14px;height:14px}
+.rewriteHead .applyOne{height:26px;padding:0 10px;border:1px solid var(--violet);border-radius:7px;background:var(--violet);color:white;font-size:9px;cursor:pointer}
+.advisory{font-size:9px;color:#a9a5b2;align-self:center}
+@media(max-width:1100px){.checks{grid-template-columns:minmax(0,1fr)}.ruleSummary,.checksWide{grid-column:auto}}

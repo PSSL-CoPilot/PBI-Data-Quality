@@ -2,22 +2,30 @@
  * Optimization view: score, opportunities, Current DAX -> Suggested DAX, and
  * page complexity.
  *
- * The honesty rules from the engine are surfaced here rather than hidden:
- * every rewrite is labelled "not benchmarked", unassessed categories show a
- * dash instead of a number, and performance is presented as a section that was
- * not measured rather than as a score.
+ * The honesty rules from the engine are surfaced rather than hidden: every
+ * rewrite is labelled "not benchmarked", unassessed categories show a dash
+ * instead of a number, and performance is presented as a section that was not
+ * measured rather than as a score.
+ *
+ * Only opportunities carrying a validated rewrite can be applied. Advisory
+ * findings have no Optimize button at all, so there is no path by which an
+ * uncertain suggestion is written into the model by a stray click.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   IMPACT_ORDER,
   optimizationLabel,
+  rewriteAsChange,
+  safeRewrites,
   type Impact,
   type OptCategory,
   type OptimizationResult,
   type Opportunity,
 } from "../lib/optimize/engine.ts";
+import type { Change } from "../lib/edit/session.ts";
 import type { FindingTarget } from "../lib/qa/engine.ts";
+import { CodeEditor } from "./CodeEditor.tsx";
 import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
 
 /** Impact reuses the severity badge modifiers so the two views read alike. */
@@ -26,27 +34,52 @@ const IMPACT_CLASS: Record<Impact, string> = { high: "s1", medium: "s2", low: "s
 const label = (target: Opportunity["target"]) =>
   target.table ? `${target.table}[${target.name}]` : target.name;
 
-function RewritePanel({ opportunity }: { opportunity: Opportunity }) {
+let counter = 0;
+const nextId = () => `opt-${++counter}-${Math.random().toString(36).slice(2, 8)}`;
+
+function RewritePanel({
+  opportunity,
+  selected,
+  onToggle,
+  onOptimize,
+}: {
+  opportunity: Opportunity;
+  selected: boolean;
+  onToggle: () => void;
+  onOptimize: (opportunity: Opportunity) => void;
+}) {
   const rewrite = opportunity.rewrite;
   if (!rewrite) return null;
 
   return (
     <div className="rewrite">
       <div className="rewriteHead">
-        <b>{label(opportunity.target)}</b>
+        <label className="pick">
+          <input type="checkbox" checked={selected} onChange={onToggle} />
+          <b>{label(opportunity.target)}</b>
+        </label>
         <span className="badge">confidence: {rewrite.confidence}</span>
         <span className="badge flat">impact: {opportunity.impact}</span>
         <span className="badge warn">not benchmarked</span>
+        <button className="applyOne" onClick={() => onOptimize(opportunity)}>
+          ⚡ Optimize
+        </button>
       </div>
 
       <div className="rewriteGrid">
         <div>
           <span className="codeLabel">CURRENT DAX</span>
-          <pre>{rewrite.original}</pre>
+          <CodeEditor value={rewrite.original} language="dax" readOnly minHeight={120} label="Current" />
         </div>
         <div className="after">
           <span className="codeLabel">SUGGESTED DAX</span>
-          <pre>{rewrite.suggested}</pre>
+          <CodeEditor
+            value={rewrite.suggested}
+            language="dax"
+            readOnly
+            minHeight={120}
+            label="Suggested"
+          />
         </div>
       </div>
 
@@ -72,24 +105,14 @@ function RewritePanel({ opportunity }: { opportunity: Opportunity }) {
 function OpportunityRow({
   opportunity,
   goTo,
+  onOptimize,
 }: {
   opportunity: Opportunity;
   goTo: (target: FindingTarget) => void;
+  onOptimize: (opportunity: Opportunity) => void;
 }) {
-  const open = () => goTo(opportunity.target);
   return (
-    <div
-      className="finding findingRow"
-      role="button"
-      tabIndex={0}
-      onClick={open}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          open();
-        }
-      }}
-    >
+    <div className="finding">
       <i className={`sev ${IMPACT_CLASS[opportunity.impact]}`}>{opportunity.impact}</i>
       <div>
         <b>{label(opportunity.target)}</b>
@@ -97,8 +120,17 @@ function OpportunityRow({
         <small>
           {opportunity.category} · {opportunity.ruleId} · {opportunity.recommendation}
         </small>
+        <div className="measureActions">
+          <button onClick={() => goTo(opportunity.target)}>Open object</button>
+          {opportunity.rewrite ? (
+            <button className="go" onClick={() => onOptimize(opportunity)}>
+              ⚡ Optimize
+            </button>
+          ) : (
+            <span className="advisory">Advisory — no safe automatic rewrite</span>
+          )}
+        </div>
       </div>
-      <span aria-hidden="true">›</span>
     </div>
   );
 }
@@ -106,13 +138,50 @@ function OpportunityRow({
 export function Optimization({
   opt,
   goTo,
+  onApply,
 }: {
   opt: OptimizationResult;
   goTo: (target: FindingTarget) => void;
+  onApply: (changes: Change[]) => void;
 }) {
   const [category, setCategory] = useState<OptCategory | "All">("All");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [note, setNote] = useState("");
+
+  const safe = useMemo(() => safeRewrites(opt), [opt]);
   const shown = opt.opportunities.filter((o) => category === "All" || o.category === category);
   const plural = opt.opportunities.length === 1 ? "y" : "ies";
+
+  const toggle = (id: string) =>
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const applyMany = (items: Opportunity[]) => {
+    const at = Date.now();
+    const changes = items
+      .map((item) => rewriteAsChange(item, nextId(), at))
+      .filter((c): c is Change => Boolean(c));
+
+    const skipped = items.length - changes.length;
+    if (changes.length === 0) {
+      setNote("Nothing was applied: none of the selected items has a safe rewrite.");
+      return;
+    }
+
+    onApply(changes);
+    setPicked(new Set());
+    setNote(
+      `Applied ${changes.length} rewrite${changes.length === 1 ? "" : "s"}${
+        skipped > 0 ? `, skipped ${skipped} without a safe rewrite` : ""
+      }. Each is listed in Changes, validated there, and can be undone.`
+    );
+  };
+
+  const selectedItems = safe.filter((o) => picked.has(o.id));
 
   return (
     <div className="checks">
@@ -152,8 +221,8 @@ export function Optimization({
             </div>
           ))}
           <div>
-            <b>{opt.rewrites.length}</b>
-            <small>with a rewrite</small>
+            <b>{safe.length}</b>
+            <small>safe to apply</small>
           </div>
         </div>
 
@@ -162,19 +231,49 @@ export function Optimization({
         </p>
       </article>
 
-      {opt.rewrites.length > 0 && (
+      {safe.length > 0 && (
         <article className="card checksWide">
           <Head
             over="CURRENT DAX → SUGGESTED DAX"
-            title={`${opt.rewrites.length} rewrite${opt.rewrites.length === 1 ? "" : "s"} available`}
+            title={`${safe.length} rewrite${safe.length === 1 ? "" : "s"} available`}
           />
           <p className="scoreNote">
             Only rewrites that could be generated mechanically and then validated appear here.
-            Everything else stays advice without generated code, because a plausible rewrite that
-            quietly changes results is worse than no rewrite.
+            Applying one edits the working model and lands in Changes, where it is validated and
+            can be undone. Advisory findings appear further down without an Optimize button,
+            because they have no safe automatic rewrite.
           </p>
-          {opt.rewrites.map((o) => (
-            <RewritePanel key={o.id} opportunity={o} />
+
+          <div className="bulkBar">
+            <button
+              onClick={() =>
+                setPicked(picked.size === safe.length ? new Set() : new Set(safe.map((o) => o.id)))
+              }
+            >
+              {picked.size === safe.length ? "Clear selection" : "Select all safe optimizations"}
+            </button>
+            <button
+              className="go"
+              disabled={selectedItems.length === 0}
+              onClick={() => applyMany(selectedItems)}
+            >
+              ⚡ Optimize selected ({selectedItems.length})
+            </button>
+            <span className="spacer">
+              {picked.size} of {safe.length} selected
+            </span>
+          </div>
+
+          {note && <div className="bulkNote">{note}</div>}
+
+          {safe.map((o) => (
+            <RewritePanel
+              key={o.id}
+              opportunity={o}
+              selected={picked.has(o.id)}
+              onToggle={() => toggle(o.id)}
+              onOptimize={(item) => applyMany([item])}
+            />
           ))}
         </article>
       )}
@@ -201,43 +300,54 @@ export function Optimization({
         {shown.length === 0 ? (
           <p>No opportunities in this category.</p>
         ) : (
-          shown.map((o) => <OpportunityRow key={o.id} opportunity={o} goTo={goTo} />)
+          shown.map((o) => (
+            <OpportunityRow
+              key={o.id}
+              opportunity={o}
+              goTo={goTo}
+              onOptimize={(item) => applyMany([item])}
+            />
+          ))
         )}
       </article>
 
       {opt.pages.length > 0 && (
         <article className="card checksWide">
           <Head over="PAGE COMPLEXITY" title="Structural cost per page" />
-          <table className="complexity">
-            <thead>
-              <tr>
-                {["Page", "Score", "Band", "Visuals", "Slicers", "Fields", "Large grids"].map((h) => (
-                  <th key={h}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {opt.pages.map((p) => (
-                <tr key={p.page}>
-                  <td>
-                    <b>{p.displayName}</b>
-                    {p.isHidden ? " · hidden" : ""}
-                  </td>
-                  <td style={{ width: 110 }}>
-                    <div className="meter">
-                      <i className={p.score >= 60 ? "hot" : ""} style={{ width: `${p.score}%` }} />
-                    </div>
-                    {p.score}/100
-                  </td>
-                  <td>{p.band}</td>
-                  <td>{p.visuals}</td>
-                  <td>{p.slicers}</td>
-                  <td>{p.distinctFields}</td>
-                  <td>{p.largeGrids}</td>
+          <div className="tableScroll">
+            <table className="complexity">
+              <thead>
+                <tr>
+                  {["Page", "Score", "Band", "Visuals", "Slicers", "Fields", "Large grids"].map(
+                    (h) => (
+                      <th key={h}>{h}</th>
+                    )
+                  )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {opt.pages.map((p) => (
+                  <tr key={p.page}>
+                    <td>
+                      <b>{p.displayName}</b>
+                      {p.isHidden ? " · hidden" : ""}
+                    </td>
+                    <td style={{ width: 110 }}>
+                      <div className="meter">
+                        <i className={p.score >= 60 ? "hot" : ""} style={{ width: `${p.score}%` }} />
+                      </div>
+                      {p.score}/100
+                    </td>
+                    <td>{p.band}</td>
+                    <td>{p.visuals}</td>
+                    <td>{p.slicers}</td>
+                    <td>{p.distinctFields}</td>
+                    <td>{p.largeGrids}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p className="scoreNote">
             Higher means more complex. The score is the sum of its parts: visuals ×2, slicers ×4,
             large tables ×6, distinct fields ×1, repeated complex measures ×3. It measures

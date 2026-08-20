@@ -92,6 +92,11 @@ export interface Visual {
   page: string;
   type: string;
   title?: string;
+  /**
+   * Static text shown by a textbox or shape. Carries no data binding, but it is
+   * what a report author writes above a card, so KPI-name inference reads it.
+   */
+  text?: string;
   x: number;
   y: number;
   width: number;

@@ -8,7 +8,7 @@ import { allMeasures, allColumns, objectKey } from "../lib/powerbi/model.ts";
 
 /** Encode a JS value the way Power BI stores its JSON parts: UTF-16LE. */
 function utf16(value, withBom = true) {
-  const text = (withBom ? "﻿" : "") + JSON.stringify(value);
+  const text = (withBom ? "\uFEFF" : "") + JSON.stringify(value);
   const out = new Uint8Array(text.length * 2);
   const view = new DataView(out.buffer);
   for (let i = 0; i < text.length; i++) view.setUint16(i * 2, text.charCodeAt(i), true);

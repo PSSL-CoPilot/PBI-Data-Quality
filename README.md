@@ -27,6 +27,24 @@ Which of those you get depends on the format:
 Nothing on screen is sample data. Where a value could not be read, the UI shows
 why instead of a number.
 
+### Measures
+
+Three views of the same set:
+
+- **All** — every measure, with its likely KPI name and source tables.
+- **By Report** — grouped under the report page whose visuals bind them,
+  collapsible, including a group for measures no page uses and a list of
+  bindings that point at measures missing from the model.
+- **By PBI Table** — grouped under the table the DAX actually reads, not the
+  home table, so measures parked in a shared `Measures` table still appear
+  under `Orders` or `Customer`. A primary table is only claimed when one
+  clearly dominates.
+
+**Likely KPI names** are inferred from report layout: a visual title where there
+is one, otherwise the nearest caption above or beside the visual. Always shown
+as *Likely*, with the evidence (which page, which source, how many pixels away)
+on hover, because nothing in the file states the link.
+
 ### Automated QA and the quality score
 
 23 rules across DAX, Model, Relationship, Report and Data quality produce a
@@ -54,6 +72,16 @@ generated code.
 
 Nothing is ever executed or timed, so no rewrite claims to be faster and
 performance hotspots are reported as *not assessed* rather than estimated.
+
+### Optimization actions
+
+Recommendations carrying a validated rewrite get a one-click **Optimize** that
+applies the DAX to the working model, revalidates, and lands in Changes where it
+can be undone. **Select all safe optimizations** and **Optimize selected** apply
+several at once and report what was applied and what was skipped.
+
+Advisory findings have no Optimize button at all, so an uncertain suggestion
+cannot be written into the model by a stray click.
 
 ### Editing and the change workspace
 
@@ -93,6 +121,13 @@ A summary of each analysis (file name, hash, format, score, finding count) is
 kept in `localStorage`. It is per-browser and not shared, which is the
 trade-off for needing no server or account. The uploaded file and the extracted
 model are never stored.
+
+## Code editing
+
+DAX, Power Query (M) and native SQL open in a CodeMirror editor with syntax
+highlighting, line numbers, search (Ctrl+F), copy, word-wrap toggle and full
+screen. DAX and M have no published grammar, so both use a tokenizer written
+here rather than a full parser.
 
 ## Fonts
 

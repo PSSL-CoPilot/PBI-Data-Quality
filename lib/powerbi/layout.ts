@@ -123,6 +123,34 @@ function visualTitle(singleVisual: Record<string, unknown>): string | undefined 
   return typeof raw === "string" ? raw.replace(/^'|'$/g, "") : undefined;
 }
 
+/**
+ * The words a textbox actually shows.
+ *
+ * Textboxes hold no data binding, so they are invisible to reference analysis,
+ * but the caption a report author types above a card is usually the name a
+ * reader knows the number by. KPI-name inference depends on this text.
+ */
+function visualText(singleVisual: Record<string, unknown>): string | undefined {
+  const objects = singleVisual.objects as
+    | { general?: Array<{ properties?: { paragraphs?: unknown } }> }
+    | undefined;
+
+  const runs: string[] = [];
+  for (const entry of objects?.general ?? []) {
+    const paragraphs = entry.properties?.paragraphs;
+    if (!Array.isArray(paragraphs)) continue;
+    for (const paragraph of paragraphs) {
+      const textRuns = (paragraph as { textRuns?: Array<{ value?: unknown }> }).textRuns;
+      for (const run of textRuns ?? []) {
+        if (typeof run.value === "string") runs.push(run.value);
+      }
+    }
+  }
+
+  const text = runs.join(" ").replace(/\s+/g, " ").trim();
+  return text.length > 0 ? text : undefined;
+}
+
 function num(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -160,6 +188,7 @@ export function parseLayout(layout: unknown): { pages: Page[]; warnings: string[
           page: name,
           type: String(singleVisual.visualType ?? "unknown"),
           title: visualTitle(singleVisual),
+          text: visualText(singleVisual),
           x: num(container.x),
           y: num(container.y),
           width: num(container.width),

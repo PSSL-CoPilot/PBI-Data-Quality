@@ -1,16 +1,12 @@
-/* eslint-disable jsx-a11y/label-has-associated-control, jsx-a11y/no-autofocus */
+/* eslint-disable jsx-a11y/no-autofocus */
 import { useEffect, useMemo, useState } from "react";
 
 import { ExtractionError, extractFile, type RawSources } from "../lib/powerbi/extract.ts";
 import { listVersions, saveVersion } from "../lib/history.ts";
 import type {
   Capability,
-  CapabilityId,
-  Measure,
-  Model,
-  ObjectType,
-  Table,
-} from "../lib/powerbi/model.ts";
+  CapabilityId,  Model,
+  ObjectType,} from "../lib/powerbi/model.ts";
 import { allColumns, allMeasures, allVisuals } from "../lib/powerbi/model.ts";
 import { findMeasureReferences, findUsage, usageLabel } from "../lib/powerbi/usage.ts";
 import {
@@ -40,13 +36,13 @@ import {
   type EditSession,
 } from "../lib/edit/session.ts";
 import { Changes } from "./Changes.tsx";
-import { ColumnEditor, MeasureEditor, PartitionEditor, TableEditor } from "./Editor.tsx";
+import { Measures } from "./Measures.tsx";
+import { Tables } from "./Tables.tsx";
 import { Optimization } from "./Optimization.tsx";
 import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
 
 type View =
   | "Overview"
-  | "Report Pages"
   | "Tables"
   | "Measures"
   | "Relationships"
@@ -60,7 +56,6 @@ type View =
 
 const NAV: View[] = [
   "Overview",
-  "Report Pages",
   "Tables",
   "Measures",
   "Relationships",
@@ -72,7 +67,7 @@ const NAV: View[] = [
   "Team",
   "Project Settings",
 ];
-const ICONS = ["◫", "▤", "▦", "ƒ", "⌁", "⌘", "✓", "◎", "⎋", "!", "♙", "⚙"];
+const ICONS = ["◫", "▦", "ƒ", "⌁", "⌘", "✓", "◎", "⎋", "!", "♙", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
 const NEEDS_MODEL: View[] = ["Tables", "Measures", "Relationships", "Dependencies"];
@@ -141,7 +136,7 @@ export default function App() {
     if (target.type === "measure") setActive("Measures");
     else if (target.type === "table" || target.type === "column") setActive("Tables");
     else if (target.type === "relationship") setActive("Relationships");
-    else setActive("Report Pages");
+    else setActive("Measures");
 
     setFocus(
       target.type === "column" && target.table
@@ -386,7 +381,7 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
     case "Quality Checks":
       return <QualityChecks {...props} />;
     case "Optimization":
-      return <Optimization opt={props.opt} goTo={props.goTo} />;
+      return <Optimization opt={props.opt} goTo={props.goTo} onApply={props.onApply} />;
     case "Changes":
       return (
         <Changes
@@ -398,8 +393,6 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
           onRevertAll={props.onRevertAll}
         />
       );
-    case "Report Pages":
-      return <Pages model={model} focus={props.focus} />;
     case "Tables":
       return (
         <Tables
@@ -415,6 +408,7 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
           key={focusKey(props.focus)}
           model={model}
           focus={props.focus}
+          opt={props.opt}
           onApply={props.onApply}
         />
       );
@@ -708,437 +702,6 @@ function QualityChecks({ qa, goTo }: ViewProps) {
           they are neither checked nor scored.
         </p>
       </article>
-    </div>
-  );
-}
-
-function useFilter<T>(rows: T[], toText: (row: T) => string) {
-  const [query, setQuery] = useState("");
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return needle ? rows.filter((row) => toText(row).toLowerCase().includes(needle)) : rows;
-  }, [rows, query, toText]);
-  return { query, setQuery, filtered };
-}
-
-function Toolbar({
-  query,
-  setQuery,
-  placeholder,
-  count,
-}: {
-  query: string;
-  setQuery: (v: string) => void;
-  placeholder: string;
-  count: string;
-}) {
-  return (
-    <div className="toolbar">
-      <div className="filter">
-        ⌕{" "}
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />
-      </div>
-      <button>{count}</button>
-    </div>
-  );
-}
-
-function Tables({
-  model,
-  focus,
-  onApply,
-}: {
-  model: Model;
-  focus: Focus;
-  onApply: (changes: Change[]) => void;
-}) {
-  const { query, setQuery, filtered } = useFilter(model.tables, (t) => t.name + t.kind);
-  // A finding can point here, so open the table it named on first render.
-  const [selected, setSelected] = useState<Table | null>(() =>
-    focus?.type === "table" ? (model.tables.find((t) => t.name === focus.name) ?? null) : null
-  );
-
-  return (
-    <>
-      <article className="card explorer">
-        <Toolbar
-          query={query}
-          setQuery={setQuery}
-          placeholder="Search tables..."
-          count={`${filtered.length} of ${model.tables.length}`}
-        />
-        <table>
-          <thead>
-            <tr>
-              {["Table name", "Kind", "Columns", "Measures", "Storage", "Hidden"].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((table) => (
-              <tr
-                key={table.name}
-                className={focus?.type === "table" && focus.name === table.name ? "hit" : ""}
-                onClick={() => setSelected(table)}
-              >
-                <td>
-                  <b>▦ {table.name}</b>
-                </td>
-                <td>{table.kind === "calculated" ? "Calculated" : "Table"}</td>
-                <td>{table.columns.length}</td>
-                <td>{table.measures.length}</td>
-                <td>{table.partitions.map((p) => p.mode ?? p.sourceType).join(", ") || "—"}</td>
-                <td>{table.isHidden ? "Yes" : "No"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </article>
-      {selected && (
-        <TableDrawer
-          model={model}
-          table={selected}
-          close={() => setSelected(null)}
-          onApply={(changes) => {
-            onApply(changes);
-            setSelected(null);
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-function TableDrawer({
-  model,
-  table,
-  close,
-  onApply,
-}: {
-  model: Model;
-  table: Table;
-  close: () => void;
-  onApply: (changes: Change[]) => void;
-}) {
-  const [editing, setEditing] = useState<
-    { kind: "table" } | { kind: "column"; name: string } | { kind: "partition"; name: string } | null
-  >(null);
-
-  const column = editing?.kind === "column" ? table.columns.find((c) => c.name === editing.name) : undefined;
-  const partition =
-    editing?.kind === "partition" ? table.partitions.find((p) => p.name === editing.name) : undefined;
-
-  return (
-    <div className="drawer">
-      <div className="drawerHead">
-        <div>
-          <small>TABLE</small>
-          <h2>{table.name}</h2>
-        </div>
-        <button onClick={close}>×</button>
-      </div>
-
-      <div className="tabs">
-        <button className={editing === null ? "on" : ""} onClick={() => setEditing(null)}>
-          Overview
-        </button>
-        <button
-          className={editing?.kind === "table" ? "on" : ""}
-          onClick={() => setEditing({ kind: "table" })}
-        >
-          Edit table
-        </button>
-      </div>
-
-      {editing?.kind === "table" && (
-        <TableEditor
-          model={model}
-          table={table}
-          onApply={onApply}
-          onCancel={() => setEditing(null)}
-        />
-      )}
-      {column && (
-        <ColumnEditor
-          model={model}
-          column={column}
-          onApply={onApply}
-          onCancel={() => setEditing(null)}
-        />
-      )}
-      {partition && (
-        <PartitionEditor
-          model={model}
-          partition={partition}
-          onApply={onApply}
-          onCancel={() => setEditing(null)}
-        />
-      )}
-
-      {editing !== null ? null : (
-        <>
-
-      {table.expression && (
-        <>
-          <label>CALCULATED TABLE DAX</label>
-          <pre>{table.expression}</pre>
-        </>
-      )}
-
-      {table.partitions.map((entry) => (
-        <div key={entry.name}>
-          <label>
-            {entry.sourceType === "m"
-              ? "POWER QUERY (M)"
-              : entry.sourceType === "query"
-                ? "NATIVE QUERY"
-                : `PARTITION · ${entry.sourceType.toUpperCase()}`}
-          </label>
-          <pre>{entry.expression ?? "No expression exposed for this partition."}</pre>
-          {entry.expression && (
-            <div className="editActions">
-              <button onClick={() => setEditing({ kind: "partition", name: entry.name })}>
-                Edit query
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
-
-      <div className="objectList">
-        <h3>Columns ({table.columns.length})</h3>
-        {table.columns.map((entry) => (
-          <div
-            key={entry.name}
-            role="button"
-            tabIndex={0}
-            onClick={() => setEditing({ kind: "column", name: entry.name })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setEditing({ kind: "column", name: entry.name });
-            }}
-          >
-            ◇ {entry.name} · {entry.dataType}
-            {entry.kind === "calculated" ? " · calculated" : ""}
-            <span>›</span>
-          </div>
-        ))}
-      </div>
-
-        </>
-      )}
-
-      <div className="drawerFoot">
-        <button onClick={close}>Done</button>
-      </div>
-    </div>
-  );
-}
-
-function Measures({
-  model,
-  focus,
-  onApply,
-}: {
-  model: Model;
-  focus: Focus;
-  onApply: (changes: Change[]) => void;
-}) {
-  const measures = allMeasures(model);
-  const { query, setQuery, filtered } = useFilter(measures, (m) => m.name + m.table + m.expression);
-  const [selected, setSelected] = useState<Measure | null>(() =>
-    focus?.type === "measure"
-      ? (measures.find((m) => m.name === focus.name && (!focus.table || m.table === focus.table)) ??
-        null)
-      : null
-  );
-
-  return (
-    <>
-      <article className="card explorer">
-        <Toolbar
-          query={query}
-          setQuery={setQuery}
-          placeholder="Search measures and DAX..."
-          count={`${filtered.length} of ${measures.length}`}
-        />
-        <table>
-          <thead>
-            <tr>
-              {["Measure name", "Home table", "DAX expression", "Format", "Used on"].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((measure) => {
-              const usage = findUsage(model, "measure", measure.table, measure.name);
-              const focused = focus?.type === "measure" && focus.name === measure.name;
-              return (
-                <tr
-                  key={`${measure.table}.${measure.name}`}
-                  className={focused ? "hit" : ""}
-                  onClick={() => setSelected(measure)}
-                >
-                  <td>
-                    <b>ƒ {measure.name}</b>
-                  </td>
-                  <td>{measure.table}</td>
-                  <td>{measure.expression.replace(/\s+/g, " ").slice(0, 70)}</td>
-                  <td>{measure.formatString ?? "—"}</td>
-                  <td>
-                    {usage.pages.length} page{usage.pages.length === 1 ? "" : "s"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </article>
-      {selected && (
-        <MeasureDrawer
-          model={model}
-          measure={selected}
-          close={() => setSelected(null)}
-          onApply={(changes) => {
-            onApply(changes);
-            setSelected(null);
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-function MeasureDrawer({
-  model,
-  measure,
-  close,
-  onApply,
-}: {
-  model: Model;
-  measure: Measure;
-  close: () => void;
-  onApply: (changes: Change[]) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const usage = findUsage(model, "measure", measure.table, measure.name);
-  const daxRefs = findMeasureReferences(model, measure.name);
-
-  return (
-    <div className="drawer">
-      <div className="drawerHead">
-        <div>
-          <small>MEASURE</small>
-          <h2>{measure.name}</h2>
-        </div>
-        <button onClick={close}>×</button>
-      </div>
-
-      <div className="tabs">
-        <button className={editing ? "" : "on"} onClick={() => setEditing(false)}>
-          Overview
-        </button>
-        <button className={editing ? "on" : ""} onClick={() => setEditing(true)}>
-          Edit measure
-        </button>
-      </div>
-
-      {editing ? (
-        <MeasureEditor
-          model={model}
-          measure={measure}
-          onApply={onApply}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <>
-      <label>DAX EXPRESSION</label>
-      <pre>{measure.expression}</pre>
-
-      <div className="meta">
-        <span>
-          <small>FORMAT</small>
-          {measure.formatString ?? "—"}
-        </span>
-        <span>
-          <small>HOME TABLE</small>
-          {measure.table}
-        </span>
-        <span>
-          <small>USED IN</small>
-          {usageLabel(usage, daxRefs)}
-        </span>
-      </div>
-
-      <div className="objectList">
-        <h3>Report usage</h3>
-        {usage.hits.length === 0 ? (
-          <div>◇ Not referenced by any visual in this report.</div>
-        ) : (
-          usage.hits.map((hit) => (
-            <div key={`${hit.page.name}-${hit.visual.id}`}>
-              ◇ {hit.page.displayName} · {hit.visual.title ?? hit.visual.type}
-              <span>›</span>
-            </div>
-          ))
-        )}
-
-        <h3>Referenced by measures</h3>
-        {daxRefs.length === 0 ? (
-          <div>◇ No other measure references this one.</div>
-        ) : (
-          daxRefs.map((ref) => (
-            <div key={ref}>
-              ◇ {ref}
-              <span>›</span>
-            </div>
-          ))
-        )}
-      </div>
-        </>
-      )}
-
-      <div className="drawerFoot">
-        <button onClick={close}>Done</button>
-      </div>
-    </div>
-  );
-}
-
-function Pages({ model, focus }: { model: Model; focus: Focus }) {
-  return (
-    <div className="pageGrid">
-      {model.pages.map((page, i) => {
-        const focused =
-          focus &&
-          (focus.page === page.name ||
-            (focus.type === "page" && focus.name === page.displayName));
-        return (
-          <article className={`card pageCard${focused ? " hit" : ""}`} key={page.name}>
-            <div className={`pagePreview p${i % 4}`}>
-              <div />
-              <div />
-              <div />
-              <span />
-            </div>
-            <small>{page.isHidden ? "HIDDEN PAGE" : "VISIBLE PAGE"}</small>
-            <h3>{page.displayName}</h3>
-            <p>
-              {page.visuals.length} visuals · {page.width}×{page.height}
-            </p>
-            <div className="pageScore">
-              <span>Distinct fields bound</span>
-              <b>
-                {
-                  new Set(page.visuals.flatMap((v) => v.refs.map((r) => `${r.table}[${r.field}]`)))
-                    .size
-                }
-              </b>
-            </div>
-          </article>
-        );
-      })}
     </div>
   );
 }
