@@ -38,6 +38,7 @@ import {
 import { Changes } from "./Changes.tsx";
 import { Measures } from "./Measures.tsx";
 import { Tables } from "./Tables.tsx";
+import { useCollapsibleNav, useTheme } from "./theme.tsx";
 import { Optimization } from "./Optimization.tsx";
 import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
 
@@ -98,6 +99,8 @@ export default function App() {
   const [search, setSearch] = useState(false);
   const [upload, setUpload] = useState(false);
   const [notice, setNotice] = useState("");
+  const theme = useTheme();
+  const rail = useCollapsibleNav();
 
   // The working model is derived by replaying the change list over the
   // untouched original, so every view reflects pending edits immediately.
@@ -157,7 +160,7 @@ export default function App() {
     : "No file analyzed yet";
 
   return (
-    <main className="shell">
+    <main className={rail.collapsed ? "shell railClosed" : "shell"}>
       <aside className="sidebar">
         <div className="brand">
           <span className="brandmark">P</span>
@@ -165,6 +168,14 @@ export default function App() {
             PBI Quality <b>Studio</b>
           </span>
         </div>
+        <button
+          className="railToggle"
+          onClick={rail.toggle}
+          aria-label={rail.collapsed ? "Expand navigation" : "Collapse navigation"}
+          title={rail.collapsed ? "Expand navigation" : "Collapse navigation"}
+        >
+          {rail.collapsed ? "»" : "«"} <span className="railLabel">&nbsp;Collapse</span>
+        </button>
         <button className="workspace">
           <span className="workspaceIcon">N</span>
           <span>
@@ -179,9 +190,10 @@ export default function App() {
               className={active === view ? "active" : ""}
               onClick={() => goToView(view)}
               key={view}
+              title={view}
             >
               <span>{ICONS[i]}</span>
-              {view}
+              <span className="navLabel">{view}</span>
               {view === "Quality Checks" && qa && qa.findings.length > 0 && (
                 <em>{qa.findings.length}</em>
               )}
@@ -230,6 +242,14 @@ export default function App() {
             </button>
             <button className="primary" onClick={() => setUpload(true)}>
               ↑ Upload Power BI file
+            </button>
+            <button
+              className="iconBtn"
+              onClick={theme.toggle}
+              title={`Switch to ${theme.resolved === "dark" ? "light" : "dark"} mode`}
+              aria-label={`Switch to ${theme.resolved === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme.resolved === "dark" ? "☀" : "☾"}
             </button>
             <div className="avatar">SP</div>
           </div>
@@ -318,20 +338,59 @@ function EmptyState({ onUpload }: { onUpload: () => void }) {
   );
 }
 
+/**
+ * The single most common confusion: a .pbix hides its model, so measures, DAX,
+ * columns, relationships and SQL are all simply absent. Users hit this and
+ * conclude the feature is broken, so the banner leads with what is missing and
+ * the exact steps to fix it, in plain words, with no file-format vocabulary
+ * before the reader needs it.
+ */
 function ModelUnavailableBanner({ model }: { model: Model }) {
-  const capability = model.capabilities.model;
-  if (capability.available) return null;
+  if (model.capabilities.model.available) return null;
 
   return (
     <div className="limitBanner">
-      <span>!</span>
+      <span className="limitIcon">!</span>
       <div>
-        <h3>This file exposed its report, but not its model</h3>
-        <p>{capability.reason}</p>
+        <h3>Only half of this file could be read</h3>
         <p>
-          <b>To get measures, DAX, columns and relationships:</b> open the file in Power BI
-          Desktop and choose <code>File → Export → Power BI template (.pbit)</code>, then upload
-          that instead. It takes a few seconds and produces a full analysis.
+          Power BI keeps the <b>data model</b> of a <code>.pbix</code> in a sealed section that
+          only Power BI Desktop can open. Nothing here can unlock it, so this file gives you the
+          report but not the model behind it.
+        </p>
+
+        <div className="haveWant">
+          <div>
+            <small>AVAILABLE NOW</small>
+            <ul>
+              <li>Report pages and visuals</li>
+              <li>Which fields each visual uses</li>
+              <li>Likely KPI names</li>
+              <li>Report and page quality checks</li>
+            </ul>
+          </div>
+          <div>
+            <small>NEEDS THE FULL FILE</small>
+            <ul>
+              <li>Measures and their DAX</li>
+              <li>Tables, columns and relationships</li>
+              <li>SQL and Power Query source queries</li>
+              <li>Editing, optimizing and exporting</li>
+            </ul>
+          </div>
+        </div>
+
+        <b className="fixTitle">To unlock everything — about 20 seconds</b>
+        <ol>
+          <li>Open this file in Power BI Desktop.</li>
+          <li>
+            Click <b>File</b> → <b>Export</b> → <b>Power BI template</b>.
+          </li>
+          <li>Save it, then upload that file here instead.</li>
+        </ol>
+        <p className="fixNote">
+          A template holds the same model but in a readable form. It contains no data rows, only
+          the structure, so it is also much smaller.
         </p>
       </div>
     </div>

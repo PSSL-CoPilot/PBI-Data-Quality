@@ -24,6 +24,7 @@ import {
 } from "@codemirror/language";
 import { sql } from "@codemirror/lang-sql";
 import { tags } from "@lezer/highlight";
+import { useTheme } from "./theme.tsx";
 
 export type CodeLanguage = "dax" | "m" | "sql" | "text";
 
@@ -89,36 +90,93 @@ function makeParser(keywords: Set<string>, lineComments: string[]): StreamParser
 const daxLanguage = StreamLanguage.define(makeParser(DAX_KEYWORDS, ["//", "--"]));
 const mLanguage = StreamLanguage.define(makeParser(M_KEYWORDS, ["//"]));
 
-/** Colours drawn from the app palette so code sits inside the design. */
-const highlight = HighlightStyle.define([
-  { tag: tags.comment, color: "#8d97a5", fontStyle: "italic" },
-  { tag: tags.string, color: "#a2543f" },
-  { tag: tags.number, color: "#2f7d5b" },
-  { tag: tags.keyword, color: "#7053c8", fontWeight: "700" },
-  { tag: tags.operator, color: "#6b6577" },
-  { tag: tags.function(tags.variableName), color: "#1f6f8b" },
-  { tag: tags.propertyName, color: "#8a4b7d" },
-  { tag: tags.typeName, color: "#2f6f4f" },
-  { tag: tags.variableName, color: "#33303c" },
+/**
+ * Two syntax palettes in the spirit of Sublime Text: saturated, high-contrast
+ * and distinct per token class, so keywords, functions, strings, numbers and
+ * column references are told apart at a glance rather than by shade.
+ *
+ * Dark follows Monokai; light is its counterpart tuned for contrast on white.
+ */
+const LIGHT_SYNTAX = HighlightStyle.define([
+  { tag: tags.comment, color: "#8a94a6", fontStyle: "italic" },
+  { tag: tags.string, color: "#c2410c" },
+  { tag: tags.number, color: "#7048e8" },
+  { tag: tags.bool, color: "#7048e8" },
+  { tag: tags.keyword, color: "#d6336c", fontWeight: "700" },
+  { tag: tags.operator, color: "#0b7285" },
+  { tag: tags.function(tags.variableName), color: "#1971c2", fontWeight: "600" },
+  { tag: tags.propertyName, color: "#0b7285" },
+  { tag: tags.typeName, color: "#2f9e44", fontWeight: "600" },
+  { tag: tags.variableName, color: "#1f2430" },
+  { tag: tags.punctuation, color: "#68707f" },
+  { tag: tags.bracket, color: "#68707f" },
 ]);
 
-const theme = EditorView.theme({
-  "&": { fontSize: "11px", backgroundColor: "#ffffff", color: "#33303c" },
-  ".cm-content": { fontFamily: "Consolas, monospace", padding: "10px 0" },
-  ".cm-gutters": {
-    backgroundColor: "#faf9fc",
-    color: "#b4b0bd",
-    border: "none",
-    borderRight: "1px solid #ebe8ef",
-  },
-  ".cm-activeLine": { backgroundColor: "#f8f6ff" },
-  ".cm-activeLineGutter": { backgroundColor: "#f2eefe" },
-  "&.cm-focused": { outline: "none" },
-  ".cm-selectionBackground, ::selection": { backgroundColor: "#e2dbfa" },
-  ".cm-panels": { backgroundColor: "#faf9fc", color: "#33303c" },
-  ".cm-searchMatch": { backgroundColor: "#fdf0c8" },
-  ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "#f7d97a" },
-});
+const DARK_SYNTAX = HighlightStyle.define([
+  { tag: tags.comment, color: "#767d93", fontStyle: "italic" },
+  { tag: tags.string, color: "#ffd866" },
+  { tag: tags.number, color: "#ab9df2" },
+  { tag: tags.bool, color: "#ab9df2" },
+  { tag: tags.keyword, color: "#ff6188", fontWeight: "700" },
+  { tag: tags.operator, color: "#ff6188" },
+  { tag: tags.function(tags.variableName), color: "#78dce8", fontWeight: "600" },
+  { tag: tags.propertyName, color: "#a9dc76" },
+  { tag: tags.typeName, color: "#fc9867", fontWeight: "600" },
+  { tag: tags.variableName, color: "#e8ebf4" },
+  { tag: tags.punctuation, color: "#9aa2b6" },
+  { tag: tags.bracket, color: "#9aa2b6" },
+]);
+
+/** Chrome colours come from the design tokens so the editor matches the app. */
+const editorChrome = (dark: boolean) =>
+  EditorView.theme(
+    {
+      "&": { fontSize: "12px", backgroundColor: "var(--surface)", color: "var(--text)" },
+      ".cm-content": {
+        fontFamily: "var(--mono-font)",
+        padding: "12px 0",
+        lineHeight: "1.7",
+        caretColor: "var(--accent)",
+      },
+      ".cm-gutters": {
+        backgroundColor: "var(--surface-2)",
+        color: "var(--text-3)",
+        border: "none",
+        borderRight: "1px solid var(--border)",
+        fontFamily: "var(--mono-font)",
+      },
+      ".cm-activeLine": { backgroundColor: "var(--surface-3)" },
+      ".cm-activeLineGutter": { backgroundColor: "var(--surface-3)", color: "var(--text-2)" },
+      "&.cm-focused": { outline: "none" },
+      ".cm-selectionBackground, ::selection": { backgroundColor: "var(--accent-soft)" },
+      "&.cm-focused .cm-selectionBackground": { backgroundColor: "var(--accent-soft)" },
+      ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "2px" },
+      ".cm-panels": {
+        backgroundColor: "var(--surface-2)",
+        color: "var(--text)",
+        borderColor: "var(--border)",
+      },
+      ".cm-panel input, .cm-panel button": {
+        backgroundColor: "var(--surface)",
+        color: "var(--text)",
+        border: "1px solid var(--border)",
+        borderRadius: "6px",
+        padding: "3px 6px",
+      },
+      ".cm-searchMatch": { backgroundColor: "var(--warn-soft)", outline: "1px solid var(--warn)" },
+      ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "var(--warn)", color: "#fff" },
+      ".cm-matchingBracket": {
+        backgroundColor: "var(--accent-soft)",
+        outline: "1px solid var(--accent)",
+      },
+    },
+    { dark }
+  );
+
+const themeExtensions = (dark: boolean) => [
+  editorChrome(dark),
+  syntaxHighlighting(dark ? DARK_SYNTAX : LIGHT_SYNTAX),
+];
 
 function languageExtension(language: CodeLanguage) {
   if (language === "sql") return sql();
@@ -158,10 +216,12 @@ export function CodeEditor({
     latest.current = onChange;
   }, [onChange]);
 
+  const { resolved } = useTheme();
   const [wrap, setWrap] = useState(true);
   const [full, setFull] = useState(false);
   const [copied, setCopied] = useState(false);
   const wrapping = useRef(new Compartment());
+  const themeSlot = useRef(new Compartment());
 
   useEffect(() => {
     if (!host.current) return;
@@ -179,8 +239,7 @@ export function CodeEditor({
           search({ top: true }),
           keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
           languageExtension(language),
-          syntaxHighlighting(highlight),
-          theme,
+          themeSlot.current.of(themeExtensions(resolved === "dark")),
           wrapping.current.of(EditorView.lineWrapping),
           EditorView.editable.of(!readOnly),
           EditorState.readOnly.of(readOnly),
@@ -216,6 +275,14 @@ export function CodeEditor({
       effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []),
     });
   }, [wrap]);
+
+  // Swap palettes in place rather than rebuilding, so the document, cursor and
+  // scroll position all survive a theme change.
+  useEffect(() => {
+    view.current?.dispatch({
+      effects: themeSlot.current.reconfigure(themeExtensions(resolved === "dark")),
+    });
+  }, [resolved]);
 
   // Escape leaves full screen, which is the shortcut people try first.
   useEffect(() => {

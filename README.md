@@ -129,6 +129,19 @@ highlighting, line numbers, search (Ctrl+F), copy, word-wrap toggle and full
 screen. DAX and M have no published grammar, so both use a tokenizer written
 here rather than a full parser.
 
+## Interface
+
+- **Light and dark themes.** Follows the operating system by default; the header
+  toggle overrides it and the choice is remembered. Every colour is a token
+  defined once per theme, so nothing is hardcoded. All text meets WCAG AA
+  contrast in both themes.
+- **Collapsible navigation.** The rail switches between labelled (244px) and
+  icon-only (68px), remembered across reloads, and collapses automatically
+  below 900px.
+- **Code editing.** DAX, Power Query (M) and SQL get Sublime-style syntax
+  colouring — a saturated Monokai palette in dark, a matched light one — with
+  line numbers, search, copy, word wrap and full screen.
+
 ## Fonts
 
 The UI is set in **Gotham**, a licensed Hoefler&Co typeface that cannot be
