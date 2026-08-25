@@ -35,18 +35,20 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-      - uses: actions/configure-pages@v5
-        id: pages
-        with:
-          # Turns Pages on for the repo if it is not already, so no manual
-          # settings change is needed before the first deploy.
-          enablement: true
-
-      # Pages serves the site from /<repo>/, which configure-pages resolves.
+      # `actions/configure-pages` is deliberately not used.
+      #
+      # It was here only to resolve the base path, which vite.config.ts now
+      # derives itself from GITHUB_REPOSITORY. Keeping it made the workflow
+      # depend on the token being allowed to create a Pages site, and where that
+      # is not permitted the run dies with "Resource not accessible by
+      # integration" before a single file is built. Dropping it removes a
+      # failure mode without losing anything.
+      #
+      # Publishing still requires Pages to be enabled on the repository with
+      # its source set to GitHub Actions. That is a repository setting and no
+      # workflow can turn it on for you when the token lacks the permission.
       - name: Build
         run: npm run build
-        env:
-          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
 
       - uses: actions/upload-pages-artifact@v3
         with:
