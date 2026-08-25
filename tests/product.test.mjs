@@ -63,3 +63,13 @@ test("version history stores a summary, never the uploaded file", async () => {
     assert.match(history, new RegExp(field));
   }
 });
+
+test("the Pages base path is derived from the repository, not hardcoded", async () => {
+  const config = await read("vite.config.ts");
+
+  // The app is mirrored to repositories whose names differ only in case, and
+  // Pages URLs are case-sensitive. A hardcoded prefix silently serves a blank
+  // page in every copy but one.
+  assert.match(config, /GITHUB_REPOSITORY/);
+  assert.match(config, /VITE_BASE/, "a non-Pages host can still override it");
+});
