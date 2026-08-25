@@ -182,14 +182,18 @@ test("measures are grouped by the page whose visuals bind them", () => {
   assert.deepEqual(measuresNotOnAnyPage(model).map((m) => m.name), ["M Unused"]);
 });
 
-test("a binding with no matching measure is reported, not silently ignored", () => {
+test("a binding with no matching measure is still shown, and flagged", () => {
   const model = makeModel({
     tables: [table("Measures", [])],
     pages: [page("s1", "Dash", [card("v1", "Deleted Measure", 0, 0)])],
   });
 
   const group = groupMeasuresByPage(model)[0];
-  assert.deepEqual(group.measures, []);
+
+  // The binding is what the report states, so it is listed either way; the
+  // missing definition is reported alongside rather than erasing the row.
+  assert.deepEqual(group.measures.map((m) => m.name), ["Deleted Measure"]);
+  assert.equal(group.measures[0].measure, undefined, "no definition was found");
   assert.deepEqual(group.unresolved, ["Deleted Measure"]);
 });
 

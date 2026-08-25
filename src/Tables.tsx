@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 
 import type { Change } from "../lib/edit/session.ts";
 import type { Column, Model, Partition, Table } from "../lib/powerbi/model.ts";
+import { replaceNativeQuery } from "../lib/powerbi/nativequery.ts";
 import { analyseMeasureSources } from "../lib/powerbi/sources.ts";
 import { CodeEditor, type CodeLanguage } from "./CodeEditor.tsx";
 import { ColumnEditor, PartitionEditor, TableEditor } from "./Editor.tsx";
@@ -33,6 +34,160 @@ export function partitionLabel(partition: Partition): string {
   if (partition.sourceType === "m") return "Power Query (M)";
   if (partition.sourceType === "calculated") return "Calculated table DAX";
   return `Source definition (${partition.sourceType})`;
+}
+
+let sqlCounter = 0;
+
+/**
+ * A SQL edit is stored as a change to the partition's whole source expression,
+ * because that is what the exporter writes back. `replaceNativeQuery` puts the
+ * edited statement into the M at the exact offsets of the original string
+ * literal, so every other character of the query is preserved.
+ */
+function sqlChange(partition: Partition, sql: string): Change {
+  const before = partition.expression ?? "";
+  const after =
+    partition.sourceType === "query" ? sql : (replaceNativeQuery(before, sql) ?? before);
+
+  return {
+    id: `sql-${++sqlCounter}-${Math.random().toString(36).slice(2, 8)}`,
+    target: { type: "partition", table: partition.table, name: partition.name },
+    field: "expression",
+    before,
+    after,
+    at: Date.now(),
+  };
+}
+
+/**
+ * What loads a table, shown the way a report author expects to see it.
+ *
+ * When the file contains a real statement it is shown as SQL on its own and can
+ * be edited. When Power Query folds its steps into a query at refresh time
+ * there is no statement in the file to show, so that is stated plainly, with
+ * the surrounding M available underneath for anyone who wants it.
+ */
+function PartitionSource({
+  partition,
+  onEdit,
+  onEditSql,
+}: {
+  partition: Partition;
+  onEdit: () => void;
+  onEditSql: (sql: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [showM, setShowM] = useState(false);
+  const info = partition.nativeQuery;
+
+  if (!partition.expression) {
+    return (
+      <p className="emptyNote">
+        Partition &quot;{partition.name}&quot; ({partition.sourceType}) carries no readable
+        definition in this file.
+      </p>
+    );
+  }
+
+  // A calculated table is DAX, not a database query.
+  if (partition.sourceType === "calculated") {
+    return (
+      <div className="sourceBlock">
+        <CodeEditor
+          value={partition.expression}
+          language="dax"
+          label="Calculated table DAX"
+          readOnly
+        />
+        <div className="measureActions">
+          <button className="go" onClick={onEdit}>
+            Edit DAX
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const startEdit = () => {
+    setDraft(info?.sql ?? "");
+    setEditing(true);
+  };
+
+  return (
+    <div className="sourceBlock">
+      {info?.kind === "native" ? (
+        <>
+          <div className="sqlHead">
+            <b>Native SQL</b>
+            <span className="srcTag">via {info.connector}</span>
+            {partition.mode && <span className="srcTag">{partition.mode}</span>}
+          </div>
+          <CodeEditor
+            value={editing ? draft : (info.sql ?? "")}
+            language="sql"
+            label="Native SQL"
+            readOnly={!editing}
+            onChange={editing ? setDraft : undefined}
+            minHeight={160}
+          />
+          <div className="measureActions">
+            {editing ? (
+              <>
+                <button
+                  className="go"
+                  disabled={draft === info.sql}
+                  onClick={() => {
+                    onEditSql(draft);
+                    setEditing(false);
+                  }}
+                >
+                  Save SQL change
+                </button>
+                <button onClick={() => setEditing(false)}>Cancel</button>
+              </>
+            ) : (
+              <button className="go" onClick={startEdit}>
+                Edit SQL
+              </button>
+            )}
+            {partition.sourceType === "m" && (
+              <button onClick={() => setShowM((v) => !v)}>
+                {showM ? "Hide Power Query" : "Show full Power Query"}
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="sqlHead">
+            <b>Native SQL unavailable for this table</b>
+          </div>
+          <p className="emptyNote">{info?.reason}</p>
+          <div className="measureActions">
+            <button onClick={() => setShowM((v) => !v)}>
+              {showM ? "Hide Power Query" : "Show Power Query"}
+            </button>
+            <button className="go" onClick={onEdit}>
+              Edit Power Query
+            </button>
+          </div>
+        </>
+      )}
+
+      {showM && (
+        <div style={{ marginTop: 10 }}>
+          <CodeEditor
+            value={partition.expression}
+            language={partitionLanguage(partition)}
+            label="Power Query (M)"
+            readOnly
+            minHeight={140}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
@@ -279,39 +434,17 @@ function TableDrawer({
             )}
           </Section>
 
-          <Section title="Source query" count={table.partitions.length}>
+          <Section title="Source SQL" count={table.partitions.length}>
             {table.partitions.length === 0 ? (
-              <p className="emptyNote">
-                This table exposes no partition or source definition.
-              </p>
+              <p className="emptyNote">This table exposes no partition or source definition.</p>
             ) : (
               table.partitions.map((entry) => (
-                <div key={entry.name} style={{ marginBottom: 12 }}>
-                  {entry.expression ? (
-                    <>
-                      <CodeEditor
-                        value={entry.expression}
-                        language={partitionLanguage(entry)}
-                        label={`${partitionLabel(entry)}${entry.mode ? ` · ${entry.mode}` : ""}`}
-                        readOnly
-                      />
-                      <div className="measureActions">
-                        <button
-                          className="go"
-                          onClick={() => setEditing({ kind: "partition", name: entry.name })}
-                        >
-                          Edit query
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="emptyNote">
-                      Partition &quot;{entry.name}&quot; ({entry.sourceType}) carries no readable
-                      expression in this file. Nothing is shown rather than guessing at SQL the
-                      model does not contain.
-                    </p>
-                  )}
-                </div>
+                <PartitionSource
+                  key={entry.name}
+                  partition={entry}
+                  onEdit={() => setEditing({ kind: "partition", name: entry.name })}
+                  onEditSql={(sql) => onApply([sqlChange(entry, sql)])}
+                />
               ))
             )}
           </Section>

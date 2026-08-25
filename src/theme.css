@@ -2380,3 +2380,148 @@ button {
   font-size: 11px !important;
   color: var(--text-3) !important;
 }
+
+/* ------------------------------------------- report page → visual → measure -- */
+
+.bindList {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+
+.bindRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 0;
+  font-size: 11px;
+}
+
+.bindRow .arrow {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.bindRow b {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.bindRow button {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: var(--surface);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.bindRow .go {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* ------------------------------------------------------- table source SQL -- */
+
+.sourceBlock {
+  margin-bottom: 14px;
+  min-width: 0;
+}
+
+.sqlHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.sqlHead b {
+  font-size: 12px;
+}
+
+/* =============================================================================
+   Layout discipline
+
+   One scroll container, not several. The shell is exactly the viewport tall,
+   the rail is its own full-height column that never scrolls with the page, and
+   only the content region scrolls. Nested scrollbars were what made the app
+   feel like separate screens stitched together.
+   ============================================================================= */
+
+.shell {
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
+.main {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The only scrolling region in the application. */
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.main header {
+  position: static;
+  flex: none;
+}
+
+/* A drawer scrolls itself, which is correct: it is a separate surface. */
+.drawer {
+  height: 100vh;
+}
+
+/* Cards start immediately under the page title rather than after a gap. */
+.title {
+  margin-bottom: 14px;
+}
+
+.content > .card:first-of-type,
+.content > .checks:first-of-type,
+.content > .grid:first-of-type {
+  margin-top: 0;
+}
+
+.explorer {
+  margin-top: 0;
+}
+
+.checks {
+  margin-top: 0;
+}
+
+/* Code inside a card can scroll itself but never widen its parent. */
+.codeShell {
+  max-width: 100%;
+}
+
+.cm-editor,
+.cm-scroller {
+  max-width: 100%;
+}
+
+.cm-scroller {
+  overflow-x: auto;
+}

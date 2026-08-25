@@ -6,10 +6,12 @@
  * A PBIX's `DataModel` part is a compressed Analysis Services backup and is not
  * readable here — see `extract.ts` for how that degrades.
  */
+import { findNativeQuery } from "./nativequery.ts";
 import type {
   Column,
   Measure,
   Model,
+  NativeQueryInfo,
   Partition,
   Relationship,
   SharedExpression,
@@ -86,7 +88,35 @@ function parsePartition(raw: Json, table: string): Partition {
     mode: str(raw.mode),
     sourceType,
     expression,
+    nativeQuery: describeQuery(sourceType, expression),
   };
+}
+
+/**
+ * What database query, if any, sits behind this partition.
+ *
+ * A native-query partition already holds the statement. An M partition usually
+ * hides one inside a connector call, so the M is searched rather than shown raw
+ * — a report author asking to "see the SQL" does not mean the whole M script.
+ * When nothing is found the reason is carried through instead of a guess.
+ */
+function describeQuery(
+  sourceType: Partition["sourceType"],
+  expression: string | undefined
+): NativeQueryInfo | undefined {
+  if (sourceType === "query" && expression) {
+    return { kind: "native", sql: expression, connector: "native query partition" };
+  }
+  if (sourceType !== "m" || !expression) return undefined;
+
+  const found = findNativeQuery(expression);
+  if (found.kind === "native") {
+    return { kind: "native", sql: found.query.sql, connector: found.query.connector };
+  }
+  if (found.kind === "folded") {
+    return { kind: "folded", connector: found.connector, reason: found.reason };
+  }
+  return { kind: "none", reason: found.reason };
 }
 
 function parseTable(raw: Json): Table {

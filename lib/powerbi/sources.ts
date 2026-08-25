@@ -158,41 +158,95 @@ export function groupMeasuresBySourceTable(
     .sort((a, b) => b.measures.length - a.measures.length || a.table.localeCompare(b.table));
 }
 
+/** One measure as a visual binds it, whether or not the model could be read. */
+export interface BoundMeasure {
+  name: string;
+  /** The table the report metadata says the binding came from. */
+  boundTable?: string;
+  /** The model definition, present only when the model was readable. */
+  measure?: Measure;
+}
+
+/** A visual with the fields it actually binds, straight from report metadata. */
+export interface VisualBinding {
+  visualId: string;
+  visualType: string;
+  /** The visual's own title, when it has one. */
+  title?: string;
+  measures: BoundMeasure[];
+  columns: Array<{ name: string; boundTable?: string }>;
+}
+
 export interface PageGroup {
   page: string;
   displayName: string;
   isHidden: boolean;
-  measures: Measure[];
-  /** Measure names bound by visuals but missing from the model. */
+  /** Every visual on the page that binds at least one field. */
+  visuals: VisualBinding[];
+  /** Distinct measures across the page, in name order. */
+  measures: BoundMeasure[];
+  /** Bound names with no match in the model. Only meaningful with a model. */
   unresolved: string[];
 }
 
 /** Measures grouped by the report page whose visuals bind them. */
+/**
+ * Report page to visual to measure, taken from the report's own bindings.
+ *
+ * The binding is the authority here, not the model: a visual states exactly
+ * which measure it draws. The model is looked up to attach the DAX where it can
+ * be, but a missing model no longer empties the page. That is what made this
+ * look broken on a .pbix — every binding was found correctly, then discarded
+ * because it could not be matched to a table that had not been read.
+ *
+ * Nothing is matched by guessing at names; only the metadata is used.
+ */
 export function groupMeasuresByPage(model: Model): PageGroup[] {
   const byName = new Map(allMeasures(model).map((m) => [m.name, m]));
+  const modelReadable = model.capabilities.model.available;
 
   return model.pages.map((page) => {
-    const names = new Set<string>();
-    for (const visual of page.visuals) {
-      for (const ref of visual.refs) {
-        if (ref.kind === "measure") names.add(ref.field);
-      }
-    }
+    const visuals: VisualBinding[] = [];
+    const distinct = new Map<string, BoundMeasure>();
+    const unresolved = new Set<string>();
 
-    const measures: Measure[] = [];
-    const unresolved: string[] = [];
-    for (const name of names) {
-      const measure = byName.get(name);
-      if (measure) measures.push(measure);
-      else unresolved.push(name);
+    for (const visual of page.visuals) {
+      const measures: BoundMeasure[] = [];
+      const columns: Array<{ name: string; boundTable?: string }> = [];
+
+      for (const ref of visual.refs) {
+        if (ref.kind === "measure") {
+          const bound: BoundMeasure = {
+            name: ref.field,
+            boundTable: ref.table,
+            measure: byName.get(ref.field),
+          };
+          measures.push(bound);
+          if (!distinct.has(ref.field)) distinct.set(ref.field, bound);
+          if (modelReadable && !bound.measure) unresolved.add(ref.field);
+        } else if (ref.kind === "column") {
+          columns.push({ name: ref.field, boundTable: ref.table });
+        }
+      }
+
+      if (measures.length > 0 || columns.length > 0) {
+        visuals.push({
+          visualId: visual.id,
+          visualType: visual.type,
+          title: visual.title,
+          measures,
+          columns,
+        });
+      }
     }
 
     return {
       page: page.name,
       displayName: page.displayName,
       isHidden: page.isHidden,
-      measures: measures.sort((a, b) => a.name.localeCompare(b.name)),
-      unresolved: unresolved.sort(),
+      visuals,
+      measures: [...distinct.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      unresolved: [...unresolved].sort(),
     };
   });
 }

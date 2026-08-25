@@ -27,6 +27,20 @@ Which of those you get depends on the format:
 Nothing on screen is sample data. Where a value could not be read, the UI shows
 why instead of a number.
 
+### Source SQL
+
+For every table the app shows the actual database query, not the M script that
+wraps it. Native statements are dug out of the connector call — `Sql.Database`
+with a `[Query=...]` option, `Value.NativeQuery`, `Odbc.Query`, `OleDb.Query`
+and the other relational connectors — with M escapes decoded so multi-line SQL
+reads as SQL. That statement can be edited, and the edit is written back into
+the M at the exact offsets of the original string, leaving the rest untouched.
+
+When Power Query folds its steps into a query at refresh time there is no
+statement in the file. That is reported as **Native SQL unavailable for this
+table**, with the reason and the Power Query shown underneath, and the SQL is
+not editable because there is nothing to edit. No SQL is ever invented.
+
 ### Measures
 
 Three views of the same set:

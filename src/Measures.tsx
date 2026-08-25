@@ -22,6 +22,7 @@ import {
   groupMeasuresBySourceTable,
   measuresNotOnAnyPage,
   type MeasureSources,
+  type VisualBinding,
 } from "../lib/powerbi/sources.ts";
 import { findMeasureReferences, findUsage, usageLabel } from "../lib/powerbi/usage.ts";
 import { CodeEditor } from "./CodeEditor.tsx";
@@ -121,6 +122,93 @@ function MeasureRow({
   );
 }
 
+/**
+ * One visual and the measures it binds.
+ *
+ * This is the report's own statement of what powers a KPI, so it renders even
+ * when the model could not be read: the binding names the measure, and the DAX
+ * is attached only if it happens to be available.
+ */
+function VisualBindingRow({
+  visual,
+  page,
+  analysis,
+  model,
+  onOpen,
+  onOptimize,
+}: {
+  visual: VisualBinding;
+  page: string;
+  analysis: Analysis;
+  model: Model;
+  onOpen: (measure: Measure) => void;
+  onOptimize: (opportunity: Opportunity) => void;
+}) {
+  // The visual's own title is the strongest KPI label; otherwise fall back to
+  // the caption inference already computed for its measures.
+  const inferred = visual.measures
+    .map((m) => bestKpiName(analysis.kpis, m.boundTable ?? m.measure?.table ?? "", m.name))
+    .find(Boolean);
+  const label = visual.title ?? inferred?.label;
+
+  return (
+    <div className="measureRow">
+      <div className="measureTop">
+        <b>▦ {label ?? visual.visualType}</b>
+        <span className="srcTag">{visual.visualType}</span>
+        {label && !visual.title && (
+          <span className={inferred?.confidence === "low" ? "kpiTag low" : "kpiTag"}>
+            Likely KPI name
+          </span>
+        )}
+      </div>
+
+      {visual.measures.length === 0 ? (
+        <div className="measureMeta">Binds columns only: {visual.columns.map((c) => c.name).join(", ")}</div>
+      ) : (
+        <div className="bindList">
+          {visual.measures.map((bound) => {
+            const key = bound.measure
+              ? `${bound.measure.table}[${bound.measure.name}]`
+              : `${bound.boundTable ?? "?"}[${bound.name}]`;
+            const rewrite = bound.measure ? analysis.rewriteFor.get(key) : undefined;
+            return (
+              <div className="bindRow" key={`${visual.visualId}-${key}`}>
+                <span className="arrow">→</span>
+                <b>[{bound.name}]</b>
+                {bound.boundTable && <span className="srcTag">{bound.boundTable}</span>}
+                {bound.measure ? (
+                  <>
+                    <button onClick={() => onOpen(bound.measure!)}>Open / edit</button>
+                    {rewrite && (
+                      <button className="go" onClick={() => onOptimize(rewrite)}>
+                        ⚡ Optimize
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span className="advisory">
+                    {model.capabilities.model.available
+                      ? "not found in the model"
+                      : "DAX needs the full file"}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {visual.columns.length > 0 && visual.measures.length > 0 && (
+        <div className="measureMeta">
+          Also uses columns: {visual.columns.map((c) => c.name).join(", ")}
+        </div>
+      )}
+      <div className="measureMeta">On {page}</div>
+    </div>
+  );
+}
+
 function Group({
   title,
   note,
@@ -189,6 +277,12 @@ export function Measures({
     return `${measure.name} ${measure.table} ${measure.expression} ${kpi}`
       .toLowerCase()
       .includes(needle);
+  };
+
+  /** Search by name alone, for bindings whose model definition may be absent. */
+  const matchesName = (name: string) => {
+    const needle = query.trim().toLowerCase();
+    return needle ? name.toLowerCase().includes(needle) : true;
   };
 
   const visible = measures.filter(matches);
@@ -273,35 +367,48 @@ export function Measures({
       {mode === "By Report" && (
         <>
           {groupMeasuresByPage(model).map((group) => {
-            const shown = group.measures.filter(matches);
+            const visuals = group.visuals.filter((v) =>
+              v.measures.some((m) => matchesName(m.name)) || matchesName(v.title ?? "")
+            );
+            const shownMeasures = group.measures.filter((m) => matchesName(m.name));
             return (
               <Group
                 key={group.page}
                 title={group.displayName}
                 note={[
                   group.isHidden ? "hidden page" : null,
+                  `${group.visuals.length} visual${group.visuals.length === 1 ? "" : "s"}`,
                   group.unresolved.length
-                    ? `${group.unresolved.length} binding(s) not in the model`
+                    ? `${group.unresolved.length} not found in model`
                     : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
-                count={shown.length}
+                count={shownMeasures.length}
               >
-                {shown.length === 0 ? (
+                {visuals.length === 0 ? (
                   <p className="emptyNote">
-                    {group.measures.length === 0
-                      ? "No measures are bound by the visuals on this page."
-                      : "No measures on this page match the search."}
+                    {group.visuals.length === 0
+                      ? "No visual on this page binds a measure or column."
+                      : "Nothing on this page matches the search."}
                   </p>
                 ) : (
-                  shown.map((measure) => (
-                    <MeasureRow key={`${measure.table}.${measure.name}`} measure={measure} {...rowProps} />
+                  visuals.map((visual) => (
+                    <VisualBindingRow
+                      key={visual.visualId}
+                      visual={visual}
+                      page={group.displayName}
+                      analysis={analysis}
+                      model={model}
+                      onOpen={setSelected}
+                      onOptimize={optimize}
+                    />
                   ))
                 )}
                 {group.unresolved.length > 0 && (
                   <p className="emptyNote">
-                    Bound but missing from the model: {group.unresolved.join(", ")}
+                    Bound by a visual but not present in the model:{" "}
+                    {group.unresolved.join(", ")}
                   </p>
                 )}
               </Group>

@@ -8,7 +8,6 @@ import type {
   CapabilityId,  Model,
   ObjectType,} from "../lib/powerbi/model.ts";
 import { allColumns, allMeasures, allVisuals } from "../lib/powerbi/model.ts";
-import { findMeasureReferences, findUsage, usageLabel } from "../lib/powerbi/usage.ts";
 import {
   runQa,
   scoreLabel,
@@ -46,8 +45,6 @@ type View =
   | "Overview"
   | "Tables"
   | "Measures"
-  | "Relationships"
-  | "Dependencies"
   | "Quality Checks"
   | "Optimization"
   | "Changes"
@@ -57,21 +54,26 @@ type View =
 
 const NAV: View[] = [
   "Overview",
-  "Tables",
   "Measures",
-  "Relationships",
-  "Dependencies",
+  "Tables",
   "Quality Checks",
+  "Issues",
   "Optimization",
   "Changes",
-  "Issues",
   "Team",
   "Project Settings",
 ];
-const ICONS = ["◫", "▦", "ƒ", "⌁", "⌘", "✓", "◎", "⎋", "!", "♙", "⚙"];
+const ICONS = ["◫", "ƒ", "▦", "✓", "!", "◎", "⎋", "♙", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
-const NEEDS_MODEL: View[] = ["Tables", "Measures", "Relationships", "Dependencies"];
+/*
+ * Views that genuinely cannot render without a semantic model.
+ *
+ * Measures is deliberately absent: its By Report view is built from report
+ * bindings, which a .pbix does expose, so blocking the whole screen hid
+ * information the file actually contained.
+ */
+const NEEDS_MODEL: View[] = [];
 
 const CAPABILITY_LABELS: Record<CapabilityId, string> = {
   model: "Semantic model",
@@ -138,7 +140,7 @@ export default function App() {
   const goTo = (target: FindingTarget) => {
     if (target.type === "measure") setActive("Measures");
     else if (target.type === "table" || target.type === "column") setActive("Tables");
-    else if (target.type === "relationship") setActive("Relationships");
+    else if (target.type === "relationship") setActive("Tables");
     else setActive("Measures");
 
     setFocus(
@@ -471,10 +473,6 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
           onApply={props.onApply}
         />
       );
-    case "Relationships":
-      return <Relationships model={model} focus={props.focus} />;
-    case "Dependencies":
-      return <Dependencies model={model} />;
     default:
       return (
         <article className="card placeholder">
@@ -762,104 +760,6 @@ function QualityChecks({ qa, goTo }: ViewProps) {
         </p>
       </article>
     </div>
-  );
-}
-
-function Relationships({ model, focus }: { model: Model; focus: Focus }) {
-  if (model.relationships.length === 0) {
-    return (
-      <article className="card placeholder">
-        <span>⌁</span>
-        <h2>No relationships</h2>
-        <p>This model defines no relationships between tables.</p>
-      </article>
-    );
-  }
-
-  return (
-    <article className="card explorer">
-      <table>
-        <thead>
-          <tr>
-            {["From", "To", "Cardinality", "Cross filter", "Active"].map((h) => (
-              <th key={h}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {model.relationships.map((rel) => (
-            <tr
-              key={rel.name}
-              className={
-                focus?.type === "relationship" && focus.name === `${rel.fromTable} → ${rel.toTable}`
-                  ? "hit"
-                  : ""
-              }
-            >
-              <td>
-                <b>
-                  {rel.fromTable}[{rel.fromColumn}]
-                </b>
-              </td>
-              <td>
-                {rel.toTable}[{rel.toColumn}]
-              </td>
-              <td>
-                {rel.fromCardinality} → {rel.toCardinality}
-              </td>
-              <td>{rel.crossFilteringBehavior}</td>
-              <td>{rel.isActive ? "Yes" : "No"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </article>
-  );
-}
-
-function Dependencies({ model }: { model: Model }) {
-  const measures = allMeasures(model);
-  const [name, setName] = useState(measures[0]?.name ?? "");
-  const measure = measures.find((m) => m.name === name);
-  const usage = measure ? findUsage(model, "measure", measure.table, measure.name) : null;
-  const daxRefs = measure ? findMeasureReferences(model, measure.name) : [];
-
-  return (
-    <article className="card explorer">
-      <div className="toolbar">
-        <div className="filter">
-          ⌕{" "}
-          <select value={name} onChange={(e) => setName(e.target.value)}>
-            {measures.map((m) => (
-              <option key={`${m.table}.${m.name}`} value={m.name}>
-                {m.table}[{m.name}]
-              </option>
-            ))}
-          </select>
-        </div>
-        <button>{usage ? usageLabel(usage, daxRefs) : "—"}</button>
-      </div>
-
-      <div className="objectList">
-        <h3>Used in report</h3>
-        {!usage || usage.hits.length === 0 ? (
-          <div>◇ Not referenced by any visual.</div>
-        ) : (
-          usage.hits.map((hit) => (
-            <div key={`${hit.page.name}-${hit.visual.id}`}>
-              ◇ {hit.page.displayName} · {hit.visual.title ?? hit.visual.type}
-            </div>
-          ))
-        )}
-
-        <h3>Used by measures</h3>
-        {daxRefs.length === 0 ? (
-          <div>◇ No dependent measures.</div>
-        ) : (
-          daxRefs.map((ref) => <div key={ref}>◇ {ref}</div>)
-        )}
-      </div>
-    </article>
   );
 }
 

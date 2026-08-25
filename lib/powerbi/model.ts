@@ -45,6 +45,33 @@ export interface Column {
   cardinality?: number;
 }
 
+/**
+ * What the file actually says about the database query behind a table.
+ * "folded" and "none" carry a reason rather than a fabricated statement.
+ */
+export interface NativeQueryInfo {
+  kind: "native" | "folded" | "none";
+  /** Present only when kind is "native". */
+  sql?: string;
+  connector?: string;
+  reason?: string;
+}
+
+/**
+ * What the file actually says about the database query behind a table.
+ *
+ * `folded` and `none` carry a reason instead of a statement: a folded query is
+ * assembled by the mashup engine at refresh time and simply is not in the file,
+ * and inventing plausible SQL for it would be worse than saying so.
+ */
+export interface NativeQueryInfo {
+  kind: "native" | "folded" | "none";
+  /** Present only when `kind` is "native". */
+  sql?: string;
+  connector?: string;
+  reason?: string;
+}
+
 export interface Partition {
   name: string;
   table: string;
@@ -52,6 +79,11 @@ export interface Partition {
   /** `m` = Power Query, `query` = native SQL, `calculated` = calculated table. */
   sourceType: "m" | "query" | "calculated" | "entity" | "other";
   expression?: string;
+  /**
+   * The database query behind this partition. For an M partition this is the
+   * statement dug out of the connector call, not the surrounding M script.
+   */
+  nativeQuery?: NativeQueryInfo;
 }
 
 export interface Table {
