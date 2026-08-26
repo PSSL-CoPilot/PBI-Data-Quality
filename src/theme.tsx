@@ -91,11 +91,12 @@ export function useTheme(): ThemeContextValue {
 const NAV_KEY = "pbi-quality-studio.nav-collapsed";
 
 export function useCollapsibleNav() {
+  // The narrow icon rail is the resting state; the wide one is opt-in.
   const [collapsed, setCollapsed] = useState(() => {
     try {
-      return localStorage.getItem(NAV_KEY) === "1";
+      return localStorage.getItem(NAV_KEY) !== "0";
     } catch {
-      return false;
+      return true;
     }
   });
 

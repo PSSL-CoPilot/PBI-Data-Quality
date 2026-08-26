@@ -11,51 +11,58 @@
    ============================================================================= */
 
 :root {
-  /* Surfaces */
-  --canvas: #f5f6fa;
+  /* Surfaces — a blue-grey canvas with white cards sitting on it. */
+  --canvas: #eef2f4;
   --surface: #ffffff;
-  --surface-2: #fafbfd;
-  --surface-3: #f2f4f9;
-  --border: #e6e9f0;
-  --border-strong: #d4d9e6;
+  --surface-2: #f7f9fa;
+  --surface-3: #eef2f4;
+  --border: #e0e6e9;
+  --border-strong: #cdd6da;
 
-  /* Text */
-  --text: #151824;
-  --text-2: #575e73;
-  --text-3: #6b7183;
+  /* Text — slate rather than black, which is what keeps it calm. */
+  --text: #3d4852;
+  --text-2: #667780;
+  --text-3: #8a969e;
 
-  /* Accent */
-  --accent: #5a5bd6;
-  --accent-hover: #4a4bc4;
-  --accent-soft: #eeeefc;
+  /* One accent. Teal, used for state and action and nothing decorative. */
+  --accent: #3f9aa3;
+  --accent-hover: #34848c;
+  --accent-soft: #e8f3f4;
   --accent-text: #ffffff;
 
+  /* The rail is a dark slab; its own tokens so themes cannot drift apart. */
+  --rail-bg: #3d4852;
+  --rail-text: #a8b4bc;
+  --rail-hover: #46525d;
+  --rail-active: #3f9aa3;
+  --rail-active-text: #ffffff;
+
   /* Status */
-  --ok: #0f7a55;
-  --ok-soft: #e6f6ef;
-  --warn: #a55a09;
-  --warn-soft: #fdf2e3;
-  --danger: #bb2f4a;
-  --danger-soft: #fceaee;
-  --info: #23629f;
-  --info-soft: #e9f1fb;
+  --ok: #2f8a63;
+  --ok-soft: #e8f5ef;
+  --warn: #b0741f;
+  --warn-soft: #fdf4e6;
+  --danger: #c04a4a;
+  --danger-soft: #fbeded;
+  --info: #3f7fa8;
+  --info-soft: #ecf4f9;
 
-  /* Shape */
-  --r-xs: 6px;
-  --r-sm: 9px;
-  --r: 12px;
-  --r-lg: 16px;
-  --r-xl: 22px;
+  /* Shape — nearly square. The reference has no rounded language at all. */
+  --r-xs: 2px;
+  --r-sm: 3px;
+  --r: 3px;
+  --r-lg: 4px;
+  --r-xl: 20px;
 
-  /* Depth */
-  --shadow-sm: 0 1px 2px rgb(20 24 40 / 6%);
-  --shadow: 0 2px 8px rgb(20 24 40 / 6%), 0 1px 2px rgb(20 24 40 / 4%);
-  --shadow-lg: 0 12px 32px rgb(20 24 40 / 12%);
-  --shadow-xl: 0 24px 64px rgb(20 24 40 / 18%);
+  /* Depth — a hairline does the work a shadow used to. */
+  --shadow-sm: none;
+  --shadow: 0 1px 2px rgb(61 72 82 / 6%);
+  --shadow-lg: 0 6px 20px rgb(61 72 82 / 12%);
+  --shadow-xl: 0 16px 44px rgb(61 72 82 / 18%);
 
   /* Layout */
-  --rail: 244px;
-  --rail-collapsed: 68px;
+  --rail: 92px;
+  --rail-wide: 216px;
   --header-h: 64px;
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -67,35 +74,41 @@
 }
 
 [data-theme="dark"] {
-  --canvas: #0d0f16;
-  --surface: #151824;
-  --surface-2: #1a1e2c;
-  --surface-3: #202536;
-  --border: #262b3b;
-  --border-strong: #343b50;
+  --canvas: #171c21;
+  --surface: #1e252b;
+  --surface-2: #232b32;
+  --surface-3: #2a333b;
+  --border: #303b44;
+  --border-strong: #3d4a55;
 
-  --text: #e8ebf4;
-  --text-2: #a0a7bd;
-  --text-3: #757c93;
+  --text: #e3e9ec;
+  --text-2: #9fadb6;
+  --text-3: #79878f;
 
-  --accent: #7f7ff5;
-  --accent-hover: #9494f8;
-  --accent-soft: #222348;
-  --accent-text: #0d0f16;
+  --accent: #4fb3bc;
+  --accent-hover: #63c4cd;
+  --accent-soft: #1d3438;
+  --accent-text: #10171b;
 
-  --ok: #4fd6a0;
-  --ok-soft: #102e26;
-  --warn: #f2b562;
-  --warn-soft: #33260f;
-  --danger: #f57c96;
-  --danger-soft: #351a24;
-  --info: #74b6f7;
-  --info-soft: #10283e;
+  --rail-bg: #141a1f;
+  --rail-text: #8d9aa3;
+  --rail-hover: #1f272d;
+  --rail-active: #3f9aa3;
+  --rail-active-text: #ffffff;
 
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
-  --shadow: 0 2px 8px rgb(0 0 0 / 40%);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 50%);
-  --shadow-xl: 0 24px 64px rgb(0 0 0 / 60%);
+  --ok: #4dbd8a;
+  --ok-soft: #142a21;
+  --warn: #d9a25a;
+  --warn-soft: #2e2415;
+  --danger: #e07b7b;
+  --danger-soft: #2e1b1b;
+  --info: #6aa9d0;
+  --info-soft: #16262f;
+
+  --shadow-sm: none;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-lg: 0 6px 20px rgb(0 0 0 / 50%);
+  --shadow-xl: 0 16px 44px rgb(0 0 0 / 60%);
 }
 
 /* ------------------------------------------------------------------ base -- */
@@ -149,246 +162,219 @@ button {
 
 /* ----------------------------------------------------------------- shell -- */
 
-/*
- * The rail width is switched, not animated.
- *
- * Transitioning grid-template-columns does not work — Chrome will not
- * interpolate the track list and holds the start value indefinitely. Routing it
- * through a registered custom property animates in one direction but sticks on
- * the way back, leaving the rail stranded at the wrong width. A snap is correct
- * every time and cannot drop a frame, which is what actually matters here.
- * Everything inside the rail still fades and slides.
- */
 .shell {
-  --rail-w: 244px;
+  --rail-w: var(--rail);
   display: grid;
   grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
 }
 
-.shell.railClosed {
-  --rail-w: 68px;
+/* Wide state keeps the same icons and simply gives the labels room. */
+.shell.railOpen {
+  --rail-w: var(--rail-wide);
 }
 
-/* ---------------------------------------------------------------- rail --- */
+/* ------------------------------------------------------------------ rail -- */
 
 .sidebar {
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  position: relative;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 16px 12px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  background: var(--rail-bg);
   overflow: hidden;
   z-index: 5;
 }
 
 .brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 6px;
+  padding: 16px 8px 18px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.railOpen .brand {
+  flex-direction: row;
   gap: 10px;
-  padding: 4px 6px 14px;
-  font-size: 14px;
-  font-weight: 700;
-  white-space: nowrap;
+  padding-left: 18px;
+  text-align: left;
+  font-size: 13px;
 }
 
 .brandmark {
   display: grid;
   place-items: center;
   flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: linear-gradient(140deg, var(--accent), var(--accent-hover));
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .brand b {
-  color: var(--accent);
-}
-
-.railToggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  margin-bottom: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  color: var(--text-2);
-  font-size: 11px;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
-}
-
-.railToggle:hover {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.workspace {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 9px 10px;
-  margin-bottom: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--surface-2);
-  text-align: left;
-  overflow: hidden;
-}
-
-.workspaceIcon {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--ok-soft);
-  color: var(--ok);
+  color: #fff;
   font-weight: 700;
-  font-size: 11px;
 }
 
-.workspace span:nth-child(2) {
-  flex: 1;
-  min-width: 0;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.brand .brandWord {
+  display: none;
 }
 
-.workspace small,
-.health small {
-  display: block;
-  color: var(--text-3);
-  font-size: 9px;
-  font-weight: 500;
+.railOpen .brand .brandWord {
+  display: inline;
 }
 
+/* Every nav item is an icon over a caption, which is what makes the rail
+   readable at 92px without a tooltip. */
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   overflow-y: auto;
   overflow-x: hidden;
-  margin: 0 -4px;
-  padding: 0 4px;
 }
 
 .sidebar nav button {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  height: 38px;
-  padding: 0 10px;
+  justify-content: center;
+  gap: 5px;
+  min-height: 68px;
+  padding: 10px 6px;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   background: transparent;
-  color: var(--text-2);
-  font-size: 12px;
+  color: var(--rail-text);
+  font-size: 9px;
   font-weight: 500;
-  text-align: left;
-  white-space: nowrap;
+  line-height: 1.25;
+  text-align: center;
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
 
 .sidebar nav button > span:first-child {
-  flex: none;
-  width: 22px;
-  text-align: center;
-  font-size: 14px;
+  font-size: 17px;
+  line-height: 1;
 }
 
 .sidebar nav button .navLabel {
-  flex: 1;
-  min-width: 0;
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.sidebar nav button:hover {
-  background: var(--surface-3);
-  color: var(--text);
+.railOpen .sidebar nav button {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 46px;
+  padding: 0 18px;
+  font-size: 12px;
+  text-align: left;
 }
 
+.railOpen .sidebar nav button .navLabel {
+  flex: 1;
+}
+
+.sidebar nav button:hover {
+  background: var(--rail-hover);
+  color: #fff;
+}
+
+/* The active cell is filled edge to edge, not tinted. */
 .sidebar nav button.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--rail-active);
+  color: var(--rail-active-text);
   font-weight: 600;
 }
 
 .sidebar nav em {
-  flex: none;
-  padding: 2px 7px;
-  border-radius: 20px;
-  background: var(--danger-soft);
-  color: var(--danger);
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 18%);
+  color: #fff;
   font-size: 9px;
   font-style: normal;
   font-weight: 700;
 }
 
-.railClosed .brand span:last-child,
-.railClosed .workspace span:not(.workspaceIcon),
-.railClosed .navLabel,
-.railClosed .sidebar nav em,
-.railClosed .health > span,
-.railClosed .railLabel {
-  display: none;
+.railOpen .sidebar nav em {
+  position: static;
+  margin-left: auto;
 }
 
-.railClosed .sidebar nav button,
-.railClosed .workspace {
-  justify-content: center;
-  padding: 0;
-}
-
-.railClosed .health {
-  justify-content: center;
-}
-
+/* Scores sit at the foot of the rail as two quiet readouts. */
 .health {
   margin-top: auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 2px;
+  padding: 12px 8px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  color: var(--rail-text);
+  font-size: 9px;
+  text-align: center;
+}
+
+.railOpen .health {
+  flex-direction: row;
   gap: 10px;
-  padding: 11px;
-  border-radius: var(--r);
-  background: var(--accent-soft);
-  font-size: 11px;
+  padding-left: 18px;
+  text-align: left;
 }
 
 .health > div {
   display: grid;
   place-items: center;
   flex: none;
-  width: 36px;
-  height: 36px;
-  border: 3px solid var(--accent);
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--accent);
   border-radius: 50%;
+  color: #fff;
   font-size: 11px;
   font-weight: 700;
-  color: var(--accent);
+}
+
+.health b {
+  display: block;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.health small {
+  display: block;
+  color: var(--rail-text);
+  font-size: 9px;
 }
 
 .health > span {
   min-width: 0;
 }
 
-.health b {
-  font-size: 11px;
+.sidebar .railToggle,
+.sidebar .workspace {
+  display: none;
 }
 
 /* --------------------------------------------------------------- header -- */
@@ -400,56 +386,57 @@ button {
 }
 
 .main header {
-  position: sticky;
-  top: 0;
-  z-index: 4;
+  position: static;
+  flex: none;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 16px;
   min-height: var(--header-h);
-  padding: 12px 24px;
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
-  backdrop-filter: blur(10px);
+  padding: 0 0 0 26px;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
 .main header > div > small {
-  font-size: 10px;
+  display: block;
+  font-size: 11px;
   color: var(--text-3);
 }
 
 .main h1 {
-  margin: 2px 0 0;
-  font-size: 17px;
-  font-weight: 700;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .main header p {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   font-size: 10px;
   color: var(--text-3);
 }
 
 .actions {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  align-items: stretch;
+  gap: 0;
 }
 
 .actions button {
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 56px;
+  padding: 0 18px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
   background: var(--surface);
   color: var(--text-2);
   font-size: 11px;
-  font-weight: 600;
-  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
-    color var(--fast) var(--ease);
+  font-weight: 500;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
 
 .actions button:hover {
@@ -483,34 +470,34 @@ button {
 
 .actions .primary {
   background: var(--accent);
-  border-color: var(--accent);
+  border-left-color: var(--accent);
   color: var(--accent-text);
+  font-weight: 600;
 }
 
 .actions .primary:hover {
   background: var(--accent-hover);
-  border-color: var(--accent-hover);
   color: var(--accent-text);
 }
 
 .iconBtn {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
+  justify-content: center;
+  min-width: 56px;
   padding: 0 !important;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .avatar {
   display: grid;
   place-items: center;
   flex: none;
-  width: 32px;
-  height: 32px;
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  margin: 0 18px;
   border-radius: 50%;
-  background: var(--text);
-  color: var(--canvas);
+  background: var(--surface-3);
+  color: var(--text-2);
   font-size: 10px;
   font-weight: 700;
 }
@@ -551,8 +538,8 @@ button {
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 18px;
+  border-radius: var(--r);
+  padding: 20px 22px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -567,16 +554,17 @@ button {
 .head small,
 .command > small {
   display: block;
-  font-size: 8px;
-  letter-spacing: 0.12em;
-  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  font-weight: 600;
+  text-transform: uppercase;
   color: var(--text-3);
 }
 
 .head h3 {
-  margin: 5px 0 0;
-  font-size: 14px;
-  font-weight: 700;
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .head button {
@@ -1216,16 +1204,17 @@ button {
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 20;
-  animation: slideIn var(--normal) var(--ease);
+  /* Opacity only. A transform entrance leaves the panel 24px off-screen if the
+     animation is ever interrupted or never gets a frame, which clips its right
+     edge; position must come from layout alone. */
+  animation: slideIn var(--fast) var(--ease);
 }
 
 @keyframes slideIn {
   from {
-    transform: translate3d(24px, 0, 0);
     opacity: 0;
   }
   to {
-    transform: translate3d(0, 0, 0);
     opacity: 1;
   }
 }
@@ -2540,4 +2529,385 @@ button {
 
 .rewriteNote a {
   color: var(--accent);
+}
+
+/* =============================================================================
+   Reference alignment pass
+
+   The visual language of the target: a blue-grey canvas, flat white cards with
+   a hairline edge, uppercase micro-labels above values, underlined tabs, and a
+   single teal accent that only ever marks state or action.
+   ============================================================================= */
+
+/* ------------------------------------------------------------ page title -- */
+
+.content {
+  padding: 22px 26px 56px;
+}
+
+.title {
+  align-items: center;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.title h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.title p {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* --------------------------------------------------------- header strip -- */
+/* Stat tiles read as a label/value strip rather than as boxes with icons. */
+
+.stats {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0;
+  margin: 0 0 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.stats article {
+  gap: 0;
+  padding: 16px 20px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.stats article:last-child {
+  border-right: 0;
+}
+
+/* The icon chips were decoration; the label already says what the number is. */
+.stats .stat {
+  display: none;
+}
+
+.stats small {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.stats strong {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 6px 0 0;
+}
+
+.stats em {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* ----------------------------------------------------------------- tabs -- */
+
+.tabs {
+  gap: 26px;
+  margin: 0 0 18px;
+}
+
+.tabs button {
+  padding: 12px 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.tabs button:hover {
+  color: var(--text-2);
+}
+
+.tabs button.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* -------------------------------------------------------------- toolbar -- */
+/* A quiet action strip, matching the light bar under the tabs. */
+
+.toolbar {
+  padding: 10px 14px;
+  margin: -20px -22px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.filter {
+  height: 32px;
+  background: var(--surface);
+}
+
+.toolbar > button,
+.toolbar > select {
+  height: 32px;
+  background: var(--surface);
+}
+
+/* --------------------------------------------------------------- tables -- */
+
+.explorer {
+  padding: 20px 22px;
+}
+
+.explorer th {
+  padding: 0 12px 10px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--border);
+}
+
+.explorer td {
+  padding: 13px 12px;
+  font-size: 12px;
+}
+
+.explorer tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.explorer tbody tr.hit {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ------------------------------------------------------ label/value list -- */
+/* The "About Diane" pattern: bold label left, value right, hairline between. */
+
+.meta {
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  grid-template-columns: 1fr;
+}
+
+.meta span {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 14px;
+  padding: 13px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.meta span:last-child {
+  border-bottom: 0;
+}
+
+.meta small {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+/* --------------------------------------------------------- group cards -- */
+/* A collapsible section reads as a slab with a dark head, per the reference. */
+
+.groupCard {
+  border-radius: var(--r);
+}
+
+.groupHead {
+  padding: 12px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid transparent;
+}
+
+.groupHead b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.groupHead em {
+  font-size: 10px;
+}
+
+.groupBody {
+  padding: 4px 18px 14px;
+}
+
+/* --------------------------------------------------------------- drawer -- */
+
+.drawer {
+  width: min(700px, 100%);
+  padding: 0;
+}
+
+.drawerHead {
+  padding: 20px 24px;
+  margin: 0;
+  background: var(--text);
+  border-bottom: 0;
+}
+
+.drawerHead small,
+.drawerHead h2 {
+  color: #fff;
+}
+
+.drawerHead small {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: rgb(255 255 255 / 62%);
+}
+
+.drawerHead h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.drawerHead > button {
+  border-color: rgb(255 255 255 / 24%);
+  background: transparent;
+  color: #fff;
+}
+
+/* Everything below the head needs the padding the drawer gave up. */
+.drawer > *:not(.drawerHead) {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+.drawer > .tabs {
+  margin-top: 4px;
+}
+
+.drawerFoot {
+  padding: 16px 0 22px;
+}
+
+/* --------------------------------------------------------------- badges -- */
+
+.kpiTag,
+.srcTag,
+.badge,
+.sev,
+.qa {
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------- ring --- */
+
+.ring {
+  width: 96px;
+  height: 96px;
+}
+
+.ring b {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+/* -------------------------------------------------------------- buttons -- */
+
+.measureActions button,
+.bulkBar button,
+.editActions button,
+.changeItem .ops button,
+.codeBar button,
+.drawerFoot button,
+.modalFoot button,
+.primarySmall {
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.viewToggle {
+  border-radius: var(--r-sm);
+  padding: 0;
+  background: var(--surface);
+}
+
+.viewToggle button {
+  border-radius: 0;
+  border-right: 1px solid var(--border);
+  height: 32px;
+}
+
+.viewToggle button:last-child {
+  border-right: 0;
+}
+
+.viewToggle button.on {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------- modal --- */
+
+.modal,
+.command {
+  border-radius: var(--r-lg);
+}
+
+.drop {
+  border-radius: var(--r);
+}
+
+/* ----------------------------------------------------------- breadcrumb -- */
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  margin-left: -26px;
+}
+
+.hamburger {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 58px;
+  align-self: stretch;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 15px;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.hamburger:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.crumbText {
+  min-width: 0;
+  padding: 0 22px;
+}
+
+.crumbText h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -162,30 +162,14 @@ export default function App() {
     : "No file analyzed yet";
 
   return (
-    <main className={rail.collapsed ? "shell railClosed" : "shell"}>
+    <main className={rail.collapsed ? "shell" : "shell railOpen"}>
       <aside className="sidebar">
         <div className="brand">
           <span className="brandmark">P</span>
-          <span>
+          <span className="brandWord">
             PBI Quality <b>Studio</b>
           </span>
         </div>
-        <button
-          className="railToggle"
-          onClick={rail.toggle}
-          aria-label={rail.collapsed ? "Expand navigation" : "Collapse navigation"}
-          title={rail.collapsed ? "Expand navigation" : "Collapse navigation"}
-        >
-          {rail.collapsed ? "»" : "«"} <span className="railLabel">&nbsp;Collapse</span>
-        </button>
-        <button className="workspace">
-          <span className="workspaceIcon">N</span>
-          <span>
-            <small>Workspace</small>
-            {model ? model.source.fileName : "No model loaded"}
-          </span>
-          <span>⌄</span>
-        </button>
         <nav>
           {NAV.map((view, i) => (
             <button
@@ -230,12 +214,21 @@ export default function App() {
 
       <section className="main">
         <header>
-          <div>
-            <small>Projects / {model ? model.source.fileName : "—"}</small>
-            <h1>
-              PBI Quality <i>Studio</i>
-            </h1>
-            <p>{subtitle}</p>
+          {/* Breadcrumb reads file then view, the way the reference reads
+              organisation then person. */}
+          <div className="crumbs">
+            <button
+              className="hamburger"
+              onClick={rail.toggle}
+              aria-label={rail.collapsed ? "Show navigation labels" : "Collapse navigation"}
+              title={rail.collapsed ? "Show navigation labels" : "Collapse navigation"}
+            >
+              ☰
+            </button>
+            <div className="crumbText">
+              <h1>{model ? model.source.fileName : "No file loaded"}</h1>
+              <p>{model ? `${subtitle} · ${active}` : "Upload a .pbit, .pbip or .pbix to begin"}</p>
+            </div>
           </div>
           <div className="actions">
             <button className="search" onClick={() => setSearch(true)}>
