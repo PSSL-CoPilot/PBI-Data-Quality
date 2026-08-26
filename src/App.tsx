@@ -42,28 +42,24 @@ import { Optimization } from "./Optimization.tsx";
 import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
 
 type View =
-  | "Overview"
-  | "Tables"
+  | "Home"
   | "Measures"
-  | "Quality Checks"
-  | "Optimization"
+  | "Tables"
+  | "Quality"
+  | "Optimize"
   | "Changes"
-  | "Issues"
-  | "Team"
-  | "Project Settings";
+  | "Settings";
 
 const NAV: View[] = [
-  "Overview",
+  "Home",
   "Measures",
   "Tables",
-  "Quality Checks",
-  "Issues",
-  "Optimization",
+  "Quality",
+  "Optimize",
   "Changes",
-  "Team",
-  "Project Settings",
+  "Settings",
 ];
-const ICONS = ["◫", "ƒ", "▦", "✓", "!", "◎", "⎋", "♙", "⚙"];
+const ICONS = ["⌂", "ƒ", "▦", "✓", "◎", "⎋", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
 /*
@@ -93,7 +89,7 @@ const SEVERITY_CLASS: Record<Severity, string> = {
 type Focus = { type: ObjectType; name: string; table?: string; page?: string } | null;
 
 export default function App() {
-  const [active, setActive] = useState<View>("Overview");
+  const [active, setActive] = useState<View>("Home");
   const [session, setSession] = useState<EditSession | null>(null);
   // The original archive and its parsed documents, needed to write an export.
   const [raw, setRaw] = useState<RawSources | null>(null);
@@ -131,7 +127,7 @@ export default function App() {
     setRaw(sources);
     setFocus(null);
     setUpload(false);
-    setActive("Overview");
+    setActive("Home");
     setNotice(message);
     setTimeout(() => setNotice(""), 5000);
   };
@@ -180,10 +176,10 @@ export default function App() {
             >
               <span>{ICONS[i]}</span>
               <span className="navLabel">{view}</span>
-              {view === "Quality Checks" && qa && qa.findings.length > 0 && (
+              {view === "Quality" && qa && qa.findings.length > 0 && (
                 <em>{qa.findings.length}</em>
               )}
-              {view === "Optimization" && opt && opt.opportunities.length > 0 && (
+              {view === "Optimize" && opt && opt.opportunities.length > 0 && (
                 <em>{opt.opportunities.length}</em>
               )}
               {view === "Changes" && session && session.changes.length > 0 && (
@@ -430,11 +426,11 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
   }
 
   switch (view) {
-    case "Overview":
+    case "Home":
       return <Overview {...props} />;
-    case "Quality Checks":
+    case "Quality":
       return <QualityChecks {...props} />;
-    case "Optimization":
+    case "Optimize":
       return <Optimization opt={props.opt} model={model} goTo={props.goTo} onApply={props.onApply} />;
     case "Changes":
       return (

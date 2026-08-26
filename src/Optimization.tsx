@@ -26,6 +26,11 @@ import {
 } from "../lib/optimize/engine.ts";
 import type { Change } from "../lib/edit/session.ts";
 import type { Model } from "../lib/powerbi/model.ts";
+import {
+  findDuplicateTables,
+  planConsolidation,
+  type DuplicateGroup,
+} from "../lib/optimize/duplicates.ts";
 import type { FindingTarget } from "../lib/qa/engine.ts";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
@@ -120,6 +125,129 @@ function RewritePanel({
   );
 }
 
+/**
+ * A table-consolidation opportunity.
+ *
+ * Counts first, because they are what a reviewer is agreeing to. An unsafe
+ * group shows the same evidence but offers no Apply, and states what would have
+ * to change before merging could even be considered.
+ */
+function ConsolidationPanel({
+  group,
+  model,
+  onConsolidate,
+}: {
+  group: DuplicateGroup;
+  model: Model;
+  onConsolidate: (group: DuplicateGroup) => void;
+}) {
+  const plan = group.verdict === "unsafe" ? undefined : planConsolidation(model, group);
+  const safe = group.verdict !== "unsafe";
+  const verdictLabel =
+    group.verdict === "exact"
+      ? "exact duplicate"
+      : group.verdict === "compatible"
+        ? "safe to consolidate"
+        : "needs review";
+
+  return (
+    <div className="rewrite">
+      <div className="rewriteHead">
+        <b style={{ marginRight: "auto" }}>
+          {group.members.length} tables read {group.object}
+        </b>
+        <span className={safe ? "badge" : "badge warn"}>{verdictLabel}</span>
+        {safe && (
+          <button className="applyOne" onClick={() => onConsolidate(group)}>
+            Consolidate tables
+          </button>
+        )}
+      </div>
+
+      <div className="consolidateGrid">
+        <div>
+          <span className="codeLabel">CURRENT TABLES</span>
+          <ul className="tableList">
+            {group.members.map((m) => (
+              <li key={m} className={m === group.canonical ? "keep" : ""}>
+                {m}
+                {m === group.canonical && <em>keep</em>}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="after">
+          <span className="codeLabel">AFTER</span>
+          <ul className="tableList">
+            <li className="keep">
+              {group.canonical}
+              <em>canonical</em>
+            </li>
+          </ul>
+          {plan && (
+            <dl className="planCounts">
+              <div>
+                <dt>Measures rewritten</dt>
+                <dd>{plan.summary.measuresRewritten}</dd>
+              </div>
+              <div>
+                <dt>Calculated columns</dt>
+                <dd>{plan.summary.calculatedColumnsRewritten}</dd>
+              </div>
+              <div>
+                <dt>Visuals affected</dt>
+                <dd>{plan.summary.visualsAffected}</dd>
+              </div>
+              <div>
+                <dt>Relationships affected</dt>
+                <dd>{plan.summary.relationshipsAffected}</dd>
+              </div>
+              <div>
+                <dt>Tables no longer used</dt>
+                <dd>{plan.summary.tablesRemovable}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
+      </div>
+
+      {group.consolidatedSql && (
+        <div style={{ marginTop: 12 }}>
+          <span className="codeLabel">CONSOLIDATED SOURCE</span>
+          <CodeEditor
+            value={group.consolidatedSql}
+            language="sql"
+            readOnly
+            minHeight={110}
+            label="Merged query"
+          />
+        </div>
+      )}
+
+      {group.reasons.map((reason) => (
+        <p className="rewriteNote" key={reason}>
+          {reason}
+        </p>
+      ))}
+      {group.blockers.map((blocker) => (
+        <p className="rewriteNote blocker" key={blocker}>
+          <b>Cannot merge.</b> {blocker}
+        </p>
+      ))}
+      {plan?.warnings.map((warning) => (
+        <p className="rewriteNote blocker" key={warning}>
+          <b>Check by hand.</b> {warning}
+        </p>
+      ))}
+      <p className="rewriteNote">
+        Applying rewrites references only. The unused tables are reported, never deleted — removing
+        a table also removes its relationships, so that stays your decision.
+      </p>
+    </div>
+  );
+}
+
+
 function OpportunityRow({
   opportunity,
   goTo,
@@ -175,6 +303,7 @@ export function Optimization({
   const [note, setNote] = useState("");
 
   const safe = useMemo(() => safeRewrites(opt), [opt]);
+  const duplicates = useMemo(() => findDuplicateTables(model), [model]);
   const shown = opt.opportunities.filter((o) => category === "All" || o.category === category);
   const plural = opt.opportunities.length === 1 ? "y" : "ies";
 
@@ -208,6 +337,20 @@ export function Optimization({
   };
 
   const selectedItems = safe.filter((o) => picked.has(o.id));
+
+  const consolidate = (group: DuplicateGroup) => {
+    const plan = planConsolidation(model, group);
+    if (!plan || plan.changes.length === 0) {
+      setNote("Nothing to apply: no reference to the duplicate tables could be rewritten.");
+      return;
+    }
+    onApply(plan.changes);
+    setNote(
+      `Consolidated into ${plan.summary.canonical}: ${plan.summary.measuresRewritten} measure(s) and ` +
+        `${plan.summary.calculatedColumnsRewritten} calculated column(s) rewritten, ` +
+        `${plan.summary.tablesRemovable} table(s) now unused. Review and undo in Changes.`
+    );
+  };
 
   return (
     <div className="checks">
@@ -257,6 +400,34 @@ export function Optimization({
           by impact: high counts as 0.6 of an object, medium 0.3, low 0.1.
         </p>
       </article>
+
+      {duplicates.length > 0 && (
+        <article className="card checksWide">
+          <Head
+            over="TABLE CONSOLIDATION"
+            title={
+              duplicates.length === 1
+                ? "1 group of tables shares a source"
+                : duplicates.length + " groups of tables share a source"
+            }
+          />
+          <p className="scoreNote">
+            Tables are grouped only when they read the same object on the same server and database.
+            A merge is offered only where the filters, joins, grain and Power Query steps all match,
+            so the merged table returns the same rows and no measure changes value. Similar names
+            are never treated as evidence.
+          </p>
+          {duplicates.map((group) => (
+            <ConsolidationPanel
+              key={group.members.join("|")}
+              group={group}
+              model={model}
+              onConsolidate={consolidate}
+            />
+          ))}
+        </article>
+      )}
+
 
       {safe.length > 0 && (
         <article className="card checksWide">

@@ -2911,3 +2911,99 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ------------------------------------------------ table consolidation -- */
+
+.consolidateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.consolidateGrid > div {
+  min-width: 0;
+}
+
+.tableList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.tableList li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  font-family: var(--mono-font);
+  overflow-wrap: anywhere;
+}
+
+.tableList li:last-child {
+  border-bottom: 0;
+}
+
+.tableList li.keep {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tableList em {
+  margin-left: auto;
+  font-family: var(--app-font);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.planCounts {
+  margin: 12px 0 0;
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.planCounts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.planCounts > div:last-child {
+  border-bottom: 0;
+}
+
+.planCounts dt {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.planCounts dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rewriteNote.blocker {
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--text-2);
+}

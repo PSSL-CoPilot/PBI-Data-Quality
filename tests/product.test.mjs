@@ -11,9 +11,9 @@ test("product surface includes the primary QA workflows", async () => {
     "Upload Power BI file",
     "Tables",
     "Measures",
-    "Quality Checks",
-    "Issues",
-    "Team",
+    "Quality",
+    "Optimize",
+    "Changes",
   ]) {
     assert.match(app, new RegExp(label));
   }
