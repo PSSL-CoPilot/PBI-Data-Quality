@@ -662,8 +662,10 @@ function QualityChecks({ qa, goTo }: ViewProps) {
         <div className="qualityTop">
           <ScoreRing score={qa.overall} />
           <div>
-            <i>{scoreLabel(qa.overall)}</i>
-            <h3>Quality score</h3>
+            <i>
+              {scoreLabel(qa.overall)}
+              {qa.categories.some((c) => c.score === null) && " · partial"}
+            </i>
             <p>
               The mean of the categories that could be assessed. A category whose rules could not
               run scores nothing at all, rather than defaulting to a pass.
@@ -688,8 +690,10 @@ function QualityChecks({ qa, goTo }: ViewProps) {
         </div>
 
         <p className="scoreNote">
-          Each finding deducts from its category: critical 15, high 8, medium 3, low 1, floored at
-          zero.
+          Each score is the share of that category&rsquo;s objects with no problem, weighted by the
+          worst problem on each: a critical finding writes an object off entirely, high counts 0.6,
+          medium 0.3, low 0.1. Totalling penalties instead sent every large report to zero
+          regardless of how good it was.
         </p>
       </article>
 

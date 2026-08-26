@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runOptimization, IMPACT_WEIGHT } from "../lib/optimize/engine.ts";
+import {runOptimization} from "../lib/optimize/engine.ts";
 import { rewriteDivision, rewriteRepeatedMeasure, suggestRewrites } from "../lib/optimize/rewrite.ts";
 import { pageComplexity } from "../lib/optimize/pages.ts";
 import { buildDependencyIndex, dependencyDepth } from "../lib/powerbi/graph.ts";
@@ -262,7 +262,7 @@ test("a report-only file scores null for model categories, never 100", () => {
   assert.ok(result.skipped.length > 0);
 });
 
-test("the score is exactly 100 minus the reported deductions", () => {
+test("the score is the share of examined objects with nothing to improve", () => {
   const model = makeModel({
     tables: [table("FactSales", [measure("Ratio", "( [A] - [B] ) / [B]")], ["x"])],
     pages: [page("P1", [visual("v1", "P1", "card", [{ table: "FactSales", field: "Ratio", kind: "measure" }])])],
@@ -270,12 +270,12 @@ test("the score is exactly 100 minus the reported deductions", () => {
 
   const result = runOptimization(model);
   const dax = result.categories.find((c) => c.category === "DAX");
-  assert.equal(dax.score, 100 - dax.deductions);
 
-  const summed = result.opportunities
-    .filter((o) => o.category === "DAX")
-    .reduce((total, o) => total + IMPACT_WEIGHT[o.impact], 0);
-  assert.equal(dax.deductions, summed);
+  // One measure exists, and it has something to improve, so the category is
+  // scored against a population of one rather than against a penalty total.
+  assert.equal(dax.population, 1);
+  assert.ok(dax.affected > 0 && dax.affected <= 1);
+  assert.equal(dax.score, Math.round(100 * (1 - dax.affected / dax.population)));
 });
 
 test("performance is declared unassessed rather than estimated", () => {

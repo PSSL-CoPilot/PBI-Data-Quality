@@ -12,7 +12,13 @@
 import type { Change } from "../edit/apply.ts";
 import type { Model } from "../powerbi/model.ts";
 import { buildDependencyIndex } from "../powerbi/graph.ts";
-import { categoryScore, missingCapability, overallScore } from "../scoring.ts";
+import {
+  affectedShare,
+  categoryScore,
+  missingCapability,
+  overallScore,
+  populationFor,
+} from "../scoring.ts";
 import { allPageComplexity, type PageComplexity } from "./pages.ts";
 import {
   ALL_OPT_RULES,
@@ -59,7 +65,10 @@ export interface OptCategoryScore {
   rulesRun: number;
   rulesSkipped: number;
   opportunities: number;
-  deductions: number;
+  /** Objects this category inspects; the score is a share of these. */
+  population: number;
+  /** Impact-weighted count of affected objects. */
+  affected: number;
   reason?: string;
 }
 
@@ -124,15 +133,21 @@ export function runOptimization(
   const categories: OptCategoryScore[] = OPT_CATEGORIES.map((category) => {
     const rulesRun = ranByCategory.get(category) ?? 0;
     const items = opportunities.filter((o) => o.category === category);
-    const deductions = items.reduce((sum, o) => sum + IMPACT_WEIGHT[o.impact], 0);
+    const population = populationFor(model, category);
+    // Impact maps onto the same severity scale the QA score uses, so the two
+    // numbers on screen mean the same thing.
+    const affected = affectedShare(
+      items.map((o) => ({ key: o.target.key, severity: o.impact }))
+    );
 
     return {
       category,
-      score: categoryScore(rulesRun, deductions),
+      score: categoryScore(rulesRun, affected, population),
       rulesRun,
       rulesSkipped: skippedByCategory.get(category) ?? 0,
       opportunities: items.length,
-      deductions,
+      population,
+      affected: Math.round(affected * 100) / 100,
       reason: rulesRun === 0 ? reasonByCategory.get(category) : undefined,
     };
   });

@@ -227,7 +227,8 @@ export function Optimization({
         </div>
 
         <p className="scoreNote">
-          Each opportunity deducts from its category: high 8, medium 3, low 1, floored at zero.
+          Each score is the share of that category&rsquo;s objects with nothing to improve, weighted
+          by impact: high counts as 0.6 of an object, medium 0.3, low 0.1.
         </p>
       </article>
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runQa, SEVERITY_WEIGHT } from "../lib/qa/engine.ts";
+import { runQa } from "../lib/qa/engine.ts";
 import {
   countCalls,
   maxNesting,
@@ -151,8 +151,12 @@ test("a clean model scores 100 and a broken one is penalised by weight", () => {
   assert.ok(division, "unsafe division is found");
   assert.equal(division.severity, "high");
   assert.equal(division.target.key, "measure:FactSales[Ratio]");
-  assert.equal(dax.score, 100 - SEVERITY_WEIGHT.high * 1 - 0, "score reflects exactly the deductions");
-  assert.equal(dax.deductions, SEVERITY_WEIGHT.high);
+
+  // The model holds exactly one measure, and it is damaged at "high" (0.6 of an
+  // object), so 40% of the DAX surface is clean.
+  assert.equal(dax.population, 1);
+  assert.equal(dax.affected, 0.6);
+  assert.equal(dax.score, 40, "the score is a share of the objects examined");
 });
 
 test("findings carry a resolvable target for every object type", () => {

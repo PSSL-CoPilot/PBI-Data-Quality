@@ -7,7 +7,13 @@
  * scores `null`, not 100 — an unread model must never look like a clean one.
  */
 import type { Model } from "../powerbi/model.ts";
-import { categoryScore, missingCapability, overallScore } from "../scoring.ts";
+import {
+  affectedShare,
+  categoryScore,
+  missingCapability,
+  overallScore,
+  populationFor,
+} from "../scoring.ts";
 import {
   ALL_RULES,
   CATEGORIES,
@@ -54,7 +60,10 @@ export interface CategoryScore {
   rulesRun: number;
   rulesSkipped: number;
   findings: number;
-  deductions: number;
+  /** Objects this category inspects; the score is a share of these. */
+  population: number;
+  /** Severity-weighted count of affected objects. */
+  affected: number;
   reason?: string;
 }
 
@@ -104,15 +113,19 @@ export function runQa(model: Model, rules: Rule[] = ALL_RULES): QaResult {
   const categories: CategoryScore[] = CATEGORIES.map((category) => {
     const rulesRun = ranByCategory.get(category) ?? 0;
     const categoryFindings = findings.filter((f) => f.category === category);
-    const deductions = categoryFindings.reduce((sum, f) => sum + SEVERITY_WEIGHT[f.severity], 0);
+    const population = populationFor(model, category);
+    const affected = affectedShare(
+      categoryFindings.map((f) => ({ key: f.target.key, severity: f.severity }))
+    );
 
     return {
       category,
-      score: categoryScore(rulesRun, deductions),
+      score: categoryScore(rulesRun, affected, population),
       rulesRun,
       rulesSkipped: skippedByCategory.get(category) ?? 0,
       findings: categoryFindings.length,
-      deductions,
+      population,
+      affected: Math.round(affected * 100) / 100,
       reason: rulesRun === 0 ? reasonByCategory.get(category) : undefined,
     };
   });
