@@ -22,9 +22,9 @@ import { suggestRewrites, type Rewrite } from "./rewrite.ts";
 import { allPageComplexity } from "./pages.ts";
 
 export type Impact = "high" | "medium" | "low";
-export type OptCategory = "DAX" | "Model" | "Relationship" | "Visual";
+export type OptCategory = "DAX" | "SQL" | "Model" | "Relationship" | "Visual";
 
-export const OPT_CATEGORIES: OptCategory[] = ["DAX", "Model", "Relationship", "Visual"];
+export const OPT_CATEGORIES: OptCategory[] = ["DAX", "SQL", "Model", "Relationship", "Visual"];
 
 export interface OptTarget {
   type: ObjectType;

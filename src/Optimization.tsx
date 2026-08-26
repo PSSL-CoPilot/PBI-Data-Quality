@@ -14,6 +14,7 @@
 import { useMemo, useState } from "react";
 
 import {
+  DIALECT_LABEL,
   IMPACT_ORDER,
   optimizationLabel,
   rewriteAsChange,
@@ -24,6 +25,7 @@ import {
   type Opportunity,
 } from "../lib/optimize/engine.ts";
 import type { Change } from "../lib/edit/session.ts";
+import type { Model } from "../lib/powerbi/model.ts";
 import type { FindingTarget } from "../lib/qa/engine.ts";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
@@ -48,8 +50,15 @@ function RewritePanel({
   onToggle: () => void;
   onOptimize: (opportunity: Opportunity) => void;
 }) {
+  const sql = opportunity.sql;
   const rewrite = opportunity.rewrite;
-  if (!rewrite) return null;
+  if (!rewrite && !sql?.rewrite) return null;
+
+  const language = sql ? "sql" : "dax";
+  const before = sql ? sql.statement : rewrite!.original;
+  const after = sql ? sql.rewrite!.suggested : rewrite!.suggested;
+  const confidence = sql ? sql.rewrite!.confidence : rewrite!.confidence;
+  const behaviour = sql ? sql.rewrite!.behaviourChange : rewrite!.behaviourChange;
 
   return (
     <div className="rewrite">
@@ -58,8 +67,9 @@ function RewritePanel({
           <input type="checkbox" checked={selected} onChange={onToggle} />
           <b>{label(opportunity.target)}</b>
         </label>
-        <span className="badge">confidence: {rewrite.confidence}</span>
+        <span className="badge">confidence: {confidence}</span>
         <span className="badge flat">impact: {opportunity.impact}</span>
+        {sql && <span className="badge flat">{DIALECT_LABEL[sql.dialect]}</span>}
         <span className="badge warn">not benchmarked</span>
         <button className="applyOne" onClick={() => onOptimize(opportunity)}>
           ⚡ Optimize
@@ -68,36 +78,44 @@ function RewritePanel({
 
       <div className="rewriteGrid">
         <div>
-          <span className="codeLabel">CURRENT DAX</span>
-          <CodeEditor value={rewrite.original} language="dax" readOnly minHeight={120} label="Current" />
+          <span className="codeLabel">CURRENT {language.toUpperCase()}</span>
+          <CodeEditor value={before} language={language} readOnly minHeight={120} label="Current" />
         </div>
         <div className="after">
-          <span className="codeLabel">SUGGESTED DAX</span>
-          <CodeEditor
-            value={rewrite.suggested}
-            language="dax"
-            readOnly
-            minHeight={120}
-            label="Suggested"
-          />
+          <span className="codeLabel">SUGGESTED {language.toUpperCase()}</span>
+          <CodeEditor value={after} language={language} readOnly minHeight={120} label="Suggested" />
         </div>
       </div>
 
       <p className="rewriteNote">
-        <b>Reason.</b> {rewrite.reason}
+        <b>Problem.</b> {opportunity.detail}
       </p>
       <p className="rewriteNote">
-        <b>Recommendation.</b> {rewrite.recommendation}
+        <b>Why it matters.</b> {sql ? sql.why : rewrite!.reason}
       </p>
       <p className="rewriteNote">
-        <b>Impact.</b> {rewrite.impact} Nothing was executed or timed, so this is not a claim
-        that the result runs faster.
+        <b>Recommendation.</b> {sql ? opportunity.recommendation : rewrite!.recommendation}
       </p>
-      {rewrite.behaviourChange && (
+      {behaviour && (
         <p className="rewriteNote">
-          <b>Behaviour change.</b> {rewrite.behaviourChange}
+          <b>Behaviour change.</b> {behaviour}
         </p>
       )}
+      <p className="rewriteNote">
+        {sql ? (
+          <>
+            <b>Source.</b>{" "}
+            <a href={sql.source.url} target="_blank" rel="noreferrer">
+              {sql.source.title}
+            </a>
+          </>
+        ) : (
+          <>
+            <b>Impact.</b> {rewrite!.impact}
+          </>
+        )}{" "}
+        Nothing was executed or timed, so this is not a claim that the result runs faster.
+      </p>
     </div>
   );
 }
@@ -122,12 +140,18 @@ function OpportunityRow({
         </small>
         <div className="measureActions">
           <button onClick={() => goTo(opportunity.target)}>Open object</button>
-          {opportunity.rewrite ? (
+          {/* A SQL finding carries its rewrite under `sql`, not `rewrite`. */}
+          {opportunity.rewrite ?? opportunity.sql?.rewrite ? (
             <button className="go" onClick={() => onOptimize(opportunity)}>
               ⚡ Optimize
             </button>
           ) : (
             <span className="advisory">Advisory — no safe automatic rewrite</span>
+          )}
+          {opportunity.sql && (
+            <a className="srcLink" href={opportunity.sql.source.url} target="_blank" rel="noreferrer">
+              {opportunity.sql.source.title}
+            </a>
           )}
         </div>
       </div>
@@ -137,10 +161,12 @@ function OpportunityRow({
 
 export function Optimization({
   opt,
+  model,
   goTo,
   onApply,
 }: {
   opt: OptimizationResult;
+  model: Model;
   goTo: (target: FindingTarget) => void;
   onApply: (changes: Change[]) => void;
 }) {
@@ -163,7 +189,7 @@ export function Optimization({
   const applyMany = (items: Opportunity[]) => {
     const at = Date.now();
     const changes = items
-      .map((item) => rewriteAsChange(item, nextId(), at))
+      .map((item) => rewriteAsChange(item, nextId(), at, model))
       .filter((c): c is Change => Boolean(c));
 
     const skipped = items.length - changes.length;

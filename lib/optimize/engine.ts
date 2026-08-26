@@ -12,6 +12,7 @@
 import type { Change } from "../edit/apply.ts";
 import type { Model } from "../powerbi/model.ts";
 import { buildDependencyIndex } from "../powerbi/graph.ts";
+import { replaceNativeQuery } from "../powerbi/nativequery.ts";
 import {
   affectedShare,
   categoryScore,
@@ -30,9 +31,18 @@ import {
   type OptTarget,
 } from "./rules.ts";
 import type { Rewrite } from "./rewrite.ts";
+import {
+  analyseSql,
+  dialectFromConnector,
+  SQL_RULE_CATALOGUE,
+  type SqlDialect,
+  type SqlRewrite,
+} from "./sql.ts";
 
 export type { Impact, OptCategory, OptTarget } from "./rules.ts";
 export type { Rewrite } from "./rewrite.ts";
+export { DIALECT_LABEL, SQL_RULE_CATALOGUE } from "./sql.ts";
+export type { SqlDialect } from "./sql.ts";
 export type { PageComplexity } from "./pages.ts";
 
 export const IMPACT_WEIGHT: Record<Impact, number> = { high: 8, medium: 3, low: 1 };
@@ -49,6 +59,17 @@ export interface Opportunity {
   recommendation: string;
   /** Present only where a rewrite was generated and validated. */
   rewrite?: Rewrite;
+  /**
+   * Present on SQL findings: the statement reviewed, plus the evidence behind
+   * the recommendation. Kept separate from `rewrite`, which is DAX.
+   */
+  sql?: {
+    statement: string;
+    dialect: SqlDialect;
+    why: string;
+    source: { title: string; url: string };
+    rewrite?: SqlRewrite;
+  };
 }
 
 export interface SkippedOptRule {
@@ -130,6 +151,21 @@ export function runOptimization(
     }
   }
 
+  // SQL review is not a model rule: it reads the native statement behind each
+  // partition, which the M parser dug out at extraction time.
+  for (const opportunity of sqlOpportunities(model)) opportunities.push(opportunity);
+  if (model.capabilities.model.available) {
+    const partitions = model.tables.reduce((n, t) => n + t.partitions.length, 0);
+    if (partitions > 0) ranByCategory.set("SQL", SQL_RULE_CATALOGUE.length);
+    else {
+      skippedByCategory.set("SQL", 1);
+      reasonByCategory.set("SQL", "This model defines no partitions to read a query from.");
+    }
+  } else {
+    skippedByCategory.set("SQL", SQL_RULE_CATALOGUE.length);
+    reasonByCategory.set("SQL", model.capabilities.model.reason);
+  }
+
   const categories: OptCategoryScore[] = OPT_CATEGORIES.map((category) => {
     const rulesRun = ranByCategory.get(category) ?? 0;
     const items = opportunities.filter((o) => o.category === category);
@@ -170,9 +206,61 @@ export function runOptimization(
     skipped,
     rulesRun: [...ranByCategory.values()].reduce((a, b) => a + b, 0),
     pages: model.capabilities.report.available ? allPageComplexity(model) : [],
-    rewrites: opportunities.filter((o) => o.rewrite),
+    // Anything that can be applied mechanically, DAX or SQL alike.
+    rewrites: opportunities.filter((o) => o.rewrite ?? o.sql?.rewrite),
     performanceNotAssessed: PERFORMANCE_NOT_ASSESSED,
   };
+}
+
+/**
+ * SQL findings, expressed as optimization opportunities.
+ *
+ * Each one targets the partition that holds the statement, so applying a
+ * rewrite edits the same source expression the SQL editor writes to and lands
+ * in Pending Changes by the same route.
+ */
+function sqlOpportunities(model: Model): Opportunity[] {
+  if (!model.capabilities.model.available) return [];
+
+  const out: Opportunity[] = [];
+  for (const table of model.tables) {
+    for (const partition of table.partitions) {
+      const native = partition.nativeQuery;
+      if (native?.kind !== "native" || !native.sql) continue;
+
+      const findings = analyseSql(native.sql, {
+        dialect: dialectFromConnector(native.connector ?? ""),
+        columns: table.columns.map((c) => c.name),
+        mode: partition.mode,
+      });
+
+      for (const [i, finding] of findings.entries()) {
+        out.push({
+          id: `${finding.ruleId}#${table.name}.${partition.name}#${i}`,
+          ruleId: finding.ruleId,
+          title: finding.title,
+          category: "SQL",
+          impact: finding.impact,
+          target: {
+            type: "partition",
+            key: `partition:${table.name}[${partition.name}]`,
+            name: partition.name,
+            table: table.name,
+          },
+          detail: finding.detail,
+          recommendation: finding.recommendation,
+          sql: {
+            statement: native.sql,
+            dialect: dialectFromConnector(native.connector ?? ""),
+            why: finding.why,
+            source: finding.source,
+            rewrite: finding.rewrite,
+          },
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -186,32 +274,62 @@ export function runOptimization(
 export function rewriteAsChange(
   opportunity: Opportunity,
   id: string,
-  at: number
+  at: number,
+  model?: Model
 ): Change | undefined {
   const rewrite = opportunity.rewrite;
-  if (!rewrite) return undefined;
-  if (opportunity.target.type !== "measure" || !opportunity.target.table) return undefined;
+  if (rewrite && opportunity.target.type === "measure" && opportunity.target.table) {
+    return {
+      id,
+      target: {
+        type: "measure",
+        table: opportunity.target.table,
+        name: opportunity.target.name,
+      },
+      field: "expression",
+      before: rewrite.original,
+      after: rewrite.suggested,
+      at,
+    };
+  }
 
-  return {
-    id,
-    target: {
-      type: "measure",
-      table: opportunity.target.table,
-      name: opportunity.target.name,
-    },
-    field: "expression",
-    before: rewrite.original,
-    after: rewrite.suggested,
-    at,
-  };
+  // A SQL rewrite edits the statement inside the partition's M expression, so
+  // the change carries the whole expression — the same thing the SQL editor
+  // writes and the same thing the exporter knows how to put back.
+  const sql = opportunity.sql;
+  if (sql?.rewrite && opportunity.target.type === "partition" && opportunity.target.table && model) {
+    const table = model.tables.find((t) => t.name === opportunity.target.table);
+    const partition = table?.partitions.find((p) => p.name === opportunity.target.name);
+    if (!partition?.expression) return undefined;
+
+    const after =
+      partition.sourceType === "query"
+        ? sql.rewrite.suggested
+        : replaceNativeQuery(partition.expression, sql.rewrite.suggested);
+    if (!after || after === partition.expression) return undefined;
+
+    return {
+      id,
+      target: { type: "partition", table: opportunity.target.table, name: opportunity.target.name },
+      field: "expression",
+      before: partition.expression,
+      after,
+      at,
+    };
+  }
+
+  return undefined;
 }
 
 /** Opportunities that can be applied automatically, safest first. */
 export function safeRewrites(result: OptimizationResult): Opportunity[] {
   const rank = { high: 0, medium: 1, low: 2 } as const;
+  // A DAX rewrite lives on `rewrite`, a SQL one on `sql.rewrite`. Filtering on
+  // the former alone silently hid every SQL suggestion from the bulk actions.
+  const confidence = (o: Opportunity) => o.rewrite?.confidence ?? o.sql?.rewrite?.confidence;
   return result.rewrites
-    .filter((o) => o.rewrite && o.target.type === "measure" && o.target.table)
-    .sort((a, b) => rank[a.rewrite!.confidence] - rank[b.rewrite!.confidence]);
+    .filter((o) => confidence(o) !== undefined)
+    .sort((a, b) => rank[confidence(a)!] - rank[confidence(b)!]);
 }
 
 export function optimizationLabel(score: number | null): string {

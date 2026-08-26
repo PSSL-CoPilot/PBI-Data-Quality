@@ -9,6 +9,7 @@
  * returns whatever it could not resolve. Callers must surface `unresolved`
  * rather than treating a rename as done.
  */
+import { describeQuery } from "../powerbi/tmsl.ts";
 import type { Model, Page, Table, Visual } from "../powerbi/model.ts";
 import { allMeasures } from "../powerbi/model.ts";
 import { renameColumnInDax, renameMeasureInDax, renameTableInDax } from "./references.ts";
@@ -314,6 +315,9 @@ function setField(model: Model, change: Change): ApplyResult {
     const partition = table?.partitions.find((p) => p.name === target.name);
     if (!partition) return emptyResult(model, `Partition ${describe(target)} no longer exists.`);
     partition.expression = after;
+    // nativeQuery is derived from the expression, so it has to be recomputed or
+    // every SQL view keeps showing the statement that was just replaced.
+    partition.nativeQuery = describeQuery(partition.sourceType, after);
     return okResult(model);
   }
 

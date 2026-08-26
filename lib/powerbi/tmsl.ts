@@ -100,7 +100,7 @@ function parsePartition(raw: Json, table: string): Partition {
  * — a report author asking to "see the SQL" does not mean the whole M script.
  * When nothing is found the reason is carried through instead of a guess.
  */
-function describeQuery(
+export function describeQuery(
   sourceType: Partition["sourceType"],
   expression: string | undefined
 ): NativeQueryInfo | undefined {

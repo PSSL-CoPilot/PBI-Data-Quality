@@ -2525,3 +2525,19 @@ button {
 .cm-scroller {
   overflow-x: auto;
 }
+
+/* Best-practice source link on a recommendation. */
+.srcLink {
+  font-size: 9px;
+  color: var(--accent);
+  text-decoration: none;
+  align-self: center;
+}
+
+.srcLink:hover {
+  text-decoration: underline;
+}
+
+.rewriteNote a {
+  color: var(--accent);
+}

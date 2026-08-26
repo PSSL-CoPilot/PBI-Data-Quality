@@ -442,7 +442,7 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
     case "Quality Checks":
       return <QualityChecks {...props} />;
     case "Optimization":
-      return <Optimization opt={props.opt} goTo={props.goTo} onApply={props.onApply} />;
+      return <Optimization opt={props.opt} model={model} goTo={props.goTo} onApply={props.onApply} />;
     case "Changes":
       return (
         <Changes
