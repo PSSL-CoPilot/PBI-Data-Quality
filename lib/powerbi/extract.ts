@@ -172,7 +172,13 @@ export async function extract(fileName: string, bytes: Uint8Array): Promise<Extr
     layoutEncoding: "utf-16le",
   };
 
-  let tmsl: TmslParts = { tables: [], relationships: [], expressions: [], warnings: [] };
+  let tmsl: TmslParts = {
+    tables: [],
+    relationships: [],
+    expressions: [],
+    roles: [],
+    warnings: [],
+  };
   let modelCapability: Capability = unavailable(
     detected.modelUnavailableReason ?? "No semantic model was found in this file."
   );
@@ -249,6 +255,7 @@ export async function extract(fileName: string, bytes: Uint8Array): Promise<Extr
       tables: tmsl.tables,
       relationships: tmsl.relationships,
       expressions: tmsl.expressions,
+      roles: tmsl.roles,
       pages,
       warnings: [...tmsl.warnings, ...warnings],
     },

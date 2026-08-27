@@ -3007,3 +3007,785 @@ button {
   background: var(--warn-soft);
   color: var(--text-2);
 }
+
+/* =============================================================================
+   Table detail drawer
+
+   A fixed four-row frame: header, tabs, body, footer. Only the body scrolls.
+   Before this the panel was one scrolling column of accordions, so the title
+   and the action buttons scrolled away with the content, and a long SQL block
+   pushed the footer out of reach entirely.
+   ============================================================================= */
+
+.drawer {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.drawer > * {
+  min-width: 0;
+}
+
+.drawerHead {
+  align-items: flex-start;
+}
+
+.drawerTabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.drawerTabs button {
+  flex: none;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+
+.drawerTabs button:hover {
+  color: var(--text-2);
+}
+
+.drawerTabs button.on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--surface);
+}
+
+/* The one scrolling region in the panel. */
+.drawerBody {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px 24px 24px;
+}
+
+.drawerFoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 24px;
+  margin: 0;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+}
+
+.drawerSection {
+  margin: 20px 0 10px;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.drawerNote {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+
+/* The margin rule from the earlier pass applied to every child; the frame now
+   owns its own padding, so it must not double up. */
+.drawer > *:not(.drawerHead) {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* =============================================================================
+   Business names
+
+   A functional user recognises "Revenue this year", not [MTD_Rev_Amt_v2]. The
+   inferred business name leads; the technical name follows it, quieter. The
+   inference is never asserted as fact — the marker carries the explanation so
+   the row itself stays short.
+   ============================================================================= */
+
+.bizName {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+/* A low-confidence guess is still shown, but it does not read as settled. */
+.bizName.weak {
+  font-style: italic;
+  color: var(--text-2);
+}
+
+.techName {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.infoDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong, var(--border));
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  flex: none;
+}
+
+.infoDot:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.drawerHead h2 .infoDot {
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+}
+
+/* =============================================================================
+   Issue inbox
+
+   The quality screen reads as a queue of decisions, not a report. Each issue
+   answers four questions in the same order every time, so a reviewer learns
+   where to look once. The score and its weighting sit behind a disclosure:
+   they describe the file, and nobody has ever fixed anything by reading a
+   weighting.
+   ============================================================================= */
+
+.issueGroup {
+  grid-column: 1 / -1;
+  margin-top: 22px;
+}
+
+.issueHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.issueHeading em {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.issueHeading.critical { color: var(--sev-critical, #d3383f); }
+.issueHeading.high { color: var(--sev-high, #d9822b); }
+.issueHeading.medium { color: var(--sev-medium, #b58b00); }
+.issueHeading.low { color: var(--text-3); }
+
+.issue {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 10px;
+}
+
+/* Settled issues stay legible but stop competing for attention. */
+.issue.settled {
+  opacity: 0.62;
+  background: var(--surface-2);
+}
+
+.issueTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.issueTop h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.issueState {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+/* Label above value, so a long sentence never gets squeezed into a column. */
+.issueFacts {
+  margin: 0;
+  display: grid;
+  gap: 2px 14px;
+}
+
+.issueFacts dt {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 10px;
+}
+
+.issueFacts dd {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Two columns once there is room, because the first two facts are short. */
+@media (min-width: 900px) {
+  .issueFacts {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .issueFacts dt:nth-of-type(1) { grid-area: 1 / 1; }
+  .issueFacts dd:nth-of-type(1) { grid-area: 2 / 1; }
+  .issueFacts dt:nth-of-type(2) { grid-area: 1 / 2; }
+  .issueFacts dd:nth-of-type(2) { grid-area: 2 / 2; }
+  .issueFacts dt:nth-of-type(3) { grid-area: 3 / 1 / 4 / 3; }
+  .issueFacts dd:nth-of-type(3) { grid-area: 4 / 1 / 5 / 3; }
+  .issueFacts dt:nth-of-type(4) { grid-area: 5 / 1 / 6 / 3; }
+  .issueFacts dd:nth-of-type(4) { grid-area: 6 / 1 / 7 / 3; }
+}
+
+.issueActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.issueActions button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Pushed to the far end: it answers "which check", asked only after the fact. */
+.issueRule {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.disclosure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  color: var(--text-2);
+  font-size: 12px;
+  text-align: left;
+}
+
+.disclosure:hover {
+  color: var(--text-1);
+}
+
+.disclosureBody {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.disclosureBody h3 {
+  margin: 22px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* Optimization tabs — the four places a reviewer can actually make a change. */
+.optTabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.optTabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.optTabs button:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.optTabs button.on {
+  background: var(--accent-soft, var(--surface-2));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.optTabs button em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  text-align: center;
+}
+
+.optTabs button.on em {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+
+/* =============================================================================
+   Export audit
+
+   Every check is shown, passed ones included. A list of only failures makes a
+   clean export look like nothing was checked, which is the opposite of the
+   point.
+   ============================================================================= */
+
+.auditHeading {
+  margin: 20px 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.auditList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.auditList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.auditList li:last-child {
+  border-bottom: 0;
+}
+
+.auditList li > span {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+  flex: none;
+  width: 14px;
+  text-align: center;
+}
+
+.auditList li b {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.auditList li p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.auditPass > span {
+  color: var(--ok, #2f855a);
+}
+
+.auditFail {
+  background: var(--danger-soft, rgba(211, 56, 63, 0.06)) !important;
+}
+
+.auditFail > span {
+  color: var(--sev-critical, #d3383f);
+}
+
+.auditFail b {
+  color: var(--sev-critical, #d3383f);
+}
+
+/* =============================================================================
+   Collapsible sections
+
+   Everything expandable in the app is closed on arrival and opens from here.
+
+   The animation deliberately touches only `transform` and `opacity`. Those two
+   are handled by the compositor: no layout, no paint, so the work happens off
+   the main thread and holds 60fps even when a long list opens several at once.
+   Animating `height` or `max-height` would be the obvious approach and the
+   wrong one — height is a layout property, so every frame would re-run layout
+   for the document beneath it, which is exactly where frames get dropped.
+
+   The body is also not in the DOM until the section is opened, so a screen of
+   thirty collapsed queries costs thirty buttons rather than thirty editors.
+   ============================================================================= */
+
+.collapsible {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.collapsible.isOpen {
+  border-color: var(--border-strong, var(--border));
+}
+
+.collapsibleHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--text-1);
+  transition: background var(--fast) var(--ease);
+}
+
+.collapsibleHead:hover {
+  background: var(--surface-2);
+}
+
+.collapsibleSummary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.collapsibleHead > em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+/* Rotating the caret is a transform, so it costs the compositor and nothing else. */
+.collapsibleHead .caret {
+  display: inline-block;
+  font-size: 9px;
+  color: var(--text-3);
+  transition: transform var(--fast) var(--ease);
+  will-change: transform;
+}
+
+.collapsible.isOpen .collapsibleHead .caret {
+  transform: rotate(90deg);
+}
+
+.collapsibleBody {
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--border);
+  /* Composited-only: the element is laid out once, then slides and fades. */
+  animation: sectionIn 160ms var(--ease) both;
+  transform-origin: top center;
+}
+
+@keyframes sectionIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* A section inside a section reads as a detail of it, not a sibling. */
+.collapsible .collapsible.nested {
+  margin-top: 12px;
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------------------- queries --- */
+
+.queryCard .collapsibleSummary b {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sqlFindings {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.sqlFindings li {
+  padding: 10px 12px;
+  border-radius: var(--r-xs, 6px);
+  background: var(--surface-2);
+  border-left: 3px solid var(--border);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.sqlFindings li.high { border-left-color: var(--sev-critical, #d3383f); }
+.sqlFindings li.medium { border-left-color: var(--sev-high, #d9822b); }
+.sqlFindings li.low { border-left-color: var(--text-3); }
+
+.sqlFindings li b {
+  display: block;
+  color: var(--text-1);
+  margin-bottom: 2px;
+}
+
+.sqlFindings li span {
+  color: var(--text-2);
+}
+
+/* Bounded rendering never pretends to be complete: the count is always stated. */
+.issueMore {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 2px 4px;
+}
+
+.issueMore span {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* A zero here is a finding, not a blank: the scanner looked and found none. */
+.constructGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.construct {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.construct.has {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.construct b {
+  display: block;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-3);
+}
+
+.construct.has b {
+  color: var(--accent);
+}
+
+.construct small {
+  display: block;
+  margin: 4px 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.construct p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+/* Holds the editor's space so opening a section does not make the page jump. */
+.codeLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* =============================================================================
+   Layout, settled
+
+   Three rules, in the order the bugs appeared.
+
+   1. The scroll container is the full width of the region. It used to carry
+      `max-width: 1500px`, which meant that on any wide display the page ended
+      several hundred pixels short of the window and — worse — the scrollbar
+      floated in the middle of the background instead of sitting against the
+      edge. The readable column is now a separate element inside it, so width
+      and scrolling are no longer the same decision.
+
+   2. A drawer reflows the page rather than covering it. The content region
+      gives up exactly the drawer's width, so a table stays fully readable
+      while a row's detail is open beside it.
+
+   3. Below the width where both fit, the drawer goes back to overlaying,
+      because squeezing a page into 300px is worse than covering it.
+   ============================================================================= */
+
+:root {
+  /*
+   * Proportional, not fixed. At a fixed 700px the drawer took slightly over
+   * half a 1366 laptop screen and left the table beside it unreadable, which
+   * defeats the point of reflowing rather than covering. The floor keeps the
+   * panel's own tabs and code blocks usable; the ceiling stops it sprawling on
+   * a large display.
+   */
+  --drawer-w: clamp(400px, 38vw, 700px);
+  /* Wide enough to use a 1920 display fully; capped so text does not run to
+     absurd line lengths on an ultrawide. */
+  --page-max: 1800px;
+}
+
+.content {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  /* The scroll position belongs to the view, not to the previous one. */
+  overscroll-behavior: contain;
+}
+
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding: 22px 26px 56px;
+  min-width: 0;
+}
+
+/* --- the drawer as a column, not a curtain ------------------------------- */
+
+.drawer {
+  /* Sits below the header so the file name and the actions stay reachable
+     while a detail panel is open. */
+  inset: var(--header-h, 0) 0 0 auto;
+  width: var(--drawer-w);
+  height: auto;
+  box-shadow: none;
+  border-left: 1px solid var(--border);
+}
+
+/*
+ * The drawer sits below the header, so the header keeps the full width and
+ * only the scrolling region gives up space. `.drawerOpen` is set by React:
+ * see src/drawer.tsx for why `:has()` cannot do this job here.
+ */
+@media (min-width: 1200px) {
+  /*
+   * The width change is not transitioned, deliberately.
+   *
+   * `padding-right` is a layout property, so animating it re-runs layout for
+   * the whole content subtree on every frame — on a wide table that is the one
+   * thing guaranteed to drop frames. It is also unsafe: a transition outranks
+   * even `!important` in the cascade, so if the page is not painting when the
+   * drawer opens the transition pins the padding at its start value and the
+   * layout never arrives at all.
+   *
+   * The reflow therefore snaps, and the drawer itself fades in over it. The
+   * movement the eye follows is composited; the layout underneath is settled
+   * in one pass.
+   */
+  .shell.drawerOpen .content {
+    padding-right: var(--drawer-w);
+  }
+}
+
+/* No room to sit beside the content: cover it, and dim what is behind. */
+@media (max-width: 1199px) {
+  .drawer {
+    width: min(var(--drawer-w), 100%);
+    box-shadow: var(--shadow-xl);
+  }
+}

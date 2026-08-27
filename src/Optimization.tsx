@@ -287,6 +287,25 @@ function OpportunityRow({
   );
 }
 
+/**
+ * The four things a reviewer can actually go and change.
+ *
+ * Relationship findings live under Model: a reviewer thinking about the shape
+ * of the model is not thinking about relationships as a separate discipline,
+ * and a fifth tab holding two items reads as an oversight rather than a
+ * distinction.
+ */
+type OptTab = "DAX" | "SQL" | "Model" | "Visuals";
+
+const OPT_TABS: Record<OptTab, OptCategory[]> = {
+  DAX: ["DAX"],
+  SQL: ["SQL"],
+  Model: ["Model", "Relationship"],
+  Visuals: ["Visual"],
+};
+
+const OPT_TAB_NAMES = Object.keys(OPT_TABS) as OptTab[];
+
 export function Optimization({
   opt,
   model,
@@ -298,13 +317,13 @@ export function Optimization({
   goTo: (target: FindingTarget) => void;
   onApply: (changes: Change[]) => void;
 }) {
-  const [category, setCategory] = useState<OptCategory | "All">("All");
+  const [tab, setTab] = useState<OptTab>("DAX");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
 
   const safe = useMemo(() => safeRewrites(opt), [opt]);
   const duplicates = useMemo(() => findDuplicateTables(model), [model]);
-  const shown = opt.opportunities.filter((o) => category === "All" || o.category === category);
+  const shown = opt.opportunities.filter((o) => OPT_TABS[tab].includes(o.category));
   const plural = opt.opportunities.length === 1 ? "y" : "ies";
 
   const toggle = (id: string) =>
@@ -477,26 +496,27 @@ export function Optimization({
       )}
 
       <article className="card explorer checksWide">
-        <div className="toolbar">
-          <div className="filter">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as OptCategory | "All")}
-            >
-              <option value="All">All categories</option>
-              {opt.categories.map((c) => (
-                <option key={c.category} value={c.category}>
-                  {c.category}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button>
-            {shown.length} of {opt.opportunities.length}
-          </button>
+        <div className="optTabs">
+          {OPT_TAB_NAMES.map((name) => {
+            const count = opt.opportunities.filter((o) =>
+              OPT_TABS[name].includes(o.category)
+            ).length;
+            return (
+              <button
+                key={name}
+                className={tab === name ? "on" : ""}
+                onClick={() => setTab(name)}
+              >
+                {name}
+                <em>{count}</em>
+              </button>
+            );
+          })}
         </div>
         {shown.length === 0 ? (
-          <p>No opportunities in this category.</p>
+          <p className="emptyNote">
+            Nothing to improve under {tab} in this file.
+          </p>
         ) : (
           shown.map((o) => (
             <OpportunityRow

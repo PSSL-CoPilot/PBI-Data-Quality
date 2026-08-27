@@ -511,6 +511,11 @@ export function planConsolidation(
     .flatMap((p) => p.visuals)
     .filter((v) => v.refs.some((r) => r.table && group.members.includes(r.table))).length;
 
+  // Stamp every change with what it was for, so the export audit can check the
+  // merge took rather than seeing an unexplained scatter of DAX edits.
+  const intent = { kind: "consolidation" as const, canonical: group.canonical, replaced: duplicates };
+  for (const change of changes) change.intent = intent;
+
   return {
     group,
     changes,

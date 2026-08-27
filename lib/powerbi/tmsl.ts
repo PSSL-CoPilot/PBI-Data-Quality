@@ -8,12 +8,15 @@
  */
 import { findNativeQuery } from "./nativequery.ts";
 import type {
+  CalculationGroup,
   Column,
+  Hierarchy,
   Measure,
   Model,
   NativeQueryInfo,
   Partition,
   Relationship,
+  SecurityRole,
   SharedExpression,
   Table,
 } from "./model.ts";
@@ -40,6 +43,10 @@ export function joinExpression(value: unknown): string | undefined {
 }
 
 function parseMeasure(raw: Json, table: string): Measure {
+  // A model can declare a KPI on a measure outright. When it does, that is a
+  // stated fact and beats anything inferred from a caption on a page.
+  const kpi = (raw.kpi ?? undefined) as Json | undefined;
+
   return {
     name: String(raw.name ?? ""),
     table,
@@ -48,6 +55,13 @@ function parseMeasure(raw: Json, table: string): Measure {
     description: joinExpression(raw.description),
     displayFolder: str(raw.displayFolder),
     isHidden: bool(raw.isHidden),
+    kpi: kpi
+      ? {
+          targetExpression: joinExpression(kpi.targetExpression),
+          statusExpression: joinExpression(kpi.statusExpression),
+          statusGraphic: str(kpi.statusGraphic),
+        }
+      : undefined,
   };
 }
 
@@ -65,6 +79,58 @@ function parseColumn(raw: Json, table: string): Column {
     isHidden: bool(raw.isHidden),
     isKey: bool(raw.isKey),
     summarizeBy: str(raw.summarizeBy),
+    sortByColumn: str(raw.sortByColumn),
+  };
+}
+
+function parseHierarchy(raw: Json): Hierarchy {
+  return {
+    name: String(raw.name ?? ""),
+    levels: asArray(raw.levels)
+      .map((level, i) => ({
+        name: String(level.name ?? ""),
+        column: String(level.column ?? ""),
+        ordinal: typeof level.ordinal === "number" ? level.ordinal : i,
+      }))
+      .sort((a, b) => a.ordinal - b.ordinal),
+  };
+}
+
+function parseCalculationGroup(raw: Json): CalculationGroup {
+  return {
+    precedence: typeof raw.precedence === "number" ? raw.precedence : undefined,
+    items: asArray(raw.calculationItems).map((item) => ({
+      name: String(item.name ?? ""),
+      expression: joinExpression(item.expression) ?? "",
+    })),
+  };
+}
+
+/**
+ * Incremental refresh, summarised.
+ *
+ * Only the shape matters here: a table under a refresh policy does not hold
+ * every row its query implies, so a statement about its grain or row count has
+ * to be read differently.
+ */
+function parseRefreshPolicy(raw: Json): { policyType: string; detail: string } | undefined {
+  const policy = (raw.refreshPolicy ?? undefined) as Json | undefined;
+  if (!policy) return undefined;
+
+  const window = [
+    policy.rollingWindowPeriods && policy.rollingWindowGranularity
+      ? `keeps ${policy.rollingWindowPeriods} ${policy.rollingWindowGranularity}(s)`
+      : "",
+    policy.incrementalPeriods && policy.incrementalGranularity
+      ? `refreshes the last ${policy.incrementalPeriods} ${policy.incrementalGranularity}(s)`
+      : "",
+  ].filter(Boolean);
+
+  return {
+    policyType: str(policy.policyType) ?? "unknown",
+    detail: window.length
+      ? window.join(", ")
+      : "The table declares a refresh policy, so it may not hold every row its query returns.",
   };
 }
 
@@ -134,6 +200,11 @@ function parseTable(raw: Json): Table {
     columns: asArray(raw.columns).map((c) => parseColumn(c, name)),
     measures: asArray(raw.measures).map((m) => parseMeasure(m, name)),
     partitions,
+    hierarchies: asArray(raw.hierarchies).map(parseHierarchy),
+    calculationGroup: raw.calculationGroup
+      ? parseCalculationGroup(raw.calculationGroup as Json)
+      : undefined,
+    refreshPolicy: parseRefreshPolicy(raw),
   };
 }
 
@@ -156,6 +227,11 @@ function parseRelationship(raw: Json, index: number): Relationship {
         ? crossFilter
         : "oneDirection",
     isActive: bool(raw.isActive, true),
+    securityFilteringBehavior: str(raw.securityFilteringBehavior),
+    relyOnReferentialIntegrity:
+      typeof raw.relyOnReferentialIntegrity === "boolean"
+        ? raw.relyOnReferentialIntegrity
+        : undefined,
   };
 }
 
@@ -172,6 +248,7 @@ export interface TmslParts {
   tables: Table[];
   relationships: Relationship[];
   expressions: SharedExpression[];
+  roles: SecurityRole[];
   warnings: string[];
 }
 
@@ -186,6 +263,7 @@ export function parseTmsl(document: unknown): TmslParts {
       tables: [],
       relationships: [],
       expressions: [],
+      roles: [],
       warnings: ["The model schema contained no tables collection."],
     };
   }
@@ -207,14 +285,26 @@ export function parseTmsl(document: unknown): TmslParts {
     );
   }
 
-  const roles = asArray(model.roles);
+  // Captured, not merely counted: a review that cannot see a role cannot tell
+  // whether a table is filtered for every reader of the report.
+  const roles: SecurityRole[] = asArray(model.roles).map((role) => ({
+    name: String(role.name ?? ""),
+    modelPermission: str(role.modelPermission),
+    tableFilters: asArray(role.tablePermissions)
+      .map((permission) => ({
+        table: String(permission.name ?? ""),
+        filterExpression: joinExpression(permission.filterExpression) ?? "",
+      }))
+      .filter((filter) => filter.filterExpression.length > 0),
+  }));
+
   if (roles.length > 0) {
     warnings.push(
-      `Model defines ${roles.length} security role(s). Row-level-security DAX is preserved but not analyzed.`
+      `Model defines ${roles.length} security role(s). The filters are read and shown, but this build does not evaluate what they let through.`
     );
   }
 
-  return { tables, relationships, expressions, warnings };
+  return { tables, relationships, expressions, roles, warnings };
 }
 
 /** Convenience for tests and for the extractor: TMSL parts plus report pages. */

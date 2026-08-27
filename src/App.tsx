@@ -19,6 +19,18 @@ import {
   type QaResult,
   type Severity,
 } from "../lib/qa/engine.ts";
+import { auditModelCoverage } from "../lib/powerbi/coverage.ts";
+import { RULE_IMPACT } from "../lib/qa/impact.ts";
+import {
+  countInbox,
+  groupBySeverity,
+  isOutstanding,
+  setState,
+  stateOf,
+  TRIAGE_LABEL,
+  type Triage,
+  type TriageState,
+} from "../lib/qa/triage.ts";
 import {
   optimizationLabel,
   runOptimization,
@@ -35,31 +47,41 @@ import {
   type EditSession,
 } from "../lib/edit/session.ts";
 import { Changes } from "./Changes.tsx";
+import { DrawerHostProvider, useDrawerOpen } from "./drawer.tsx";
+import { CodeEditor } from "./CodeEditor.tsx";
 import { Measures } from "./Measures.tsx";
+import { Queries } from "./Queries.tsx";
 import { Tables } from "./Tables.tsx";
 import { useCollapsibleNav, useTheme } from "./theme.tsx";
 import { Optimization } from "./Optimization.tsx";
-import { Head, ScoreBars, ScoreRing } from "./ui.tsx";
+import { Collapsible, Head, ScoreBars, ScoreRing } from "./ui.tsx";
 
 type View =
   | "Home"
   | "Measures"
   | "Tables"
+  | "Queries"
   | "Quality"
   | "Optimize"
   | "Changes"
   | "Settings";
 
+/*
+ * Queries sits next to Tables, because that is where a reviewer already is
+ * when they want to change what a table loads. It used to be reachable only
+ * from inside a table's drawer, which is not somewhere anyone finds by looking.
+ */
 const NAV: View[] = [
   "Home",
   "Measures",
   "Tables",
+  "Queries",
   "Quality",
   "Optimize",
   "Changes",
   "Settings",
 ];
-const ICONS = ["⌂", "ƒ", "▦", "✓", "◎", "⎋", "⚙"];
+const ICONS = ["⌂", "ƒ", "▦", "⌗", "✓", "◎", "⎋", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
 /*
@@ -88,7 +110,19 @@ const SEVERITY_CLASS: Record<Severity, string> = {
 
 type Focus = { type: ObjectType; name: string; table?: string; page?: string } | null;
 
+/**
+ * The provider has to sit outside the component that reads it, so the shell is
+ * split in two: this wrapper owns the drawer registry, `AppShell` consumes it.
+ */
 export default function App() {
+  return (
+    <DrawerHostProvider>
+      <AppShell />
+    </DrawerHostProvider>
+  );
+}
+
+function AppShell() {
   const [active, setActive] = useState<View>("Home");
   const [session, setSession] = useState<EditSession | null>(null);
   // The original archive and its parsed documents, needed to write an export.
@@ -99,6 +133,8 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const theme = useTheme();
   const rail = useCollapsibleNav();
+  // True while any detail panel is on screen, so the content can make room.
+  const drawerOpen = useDrawerOpen();
 
   // The working model is derived by replaying the change list over the
   // untouched original, so every view reflects pending edits immediately.
@@ -108,6 +144,11 @@ export default function App() {
   // QA and optimization are pure functions of the model, so neither needs a
   // separate "run" state; both recompute when the working model changes.
   const qa = useMemo(() => (model ? runQa(model) : null), [model]);
+  // A reviewer's decisions about the findings, kept apart from the findings
+  // themselves so a re-run never overwrites them.
+  const [triage, setTriage] = useState<Triage>({});
+  const onTriage = (id: string, state: TriageState) =>
+    setTriage((current) => setState(current, id, state));
   const opt = useMemo(() => (model ? runOptimization(model) : null), [model]);
 
   useEffect(() => {
@@ -125,6 +166,8 @@ export default function App() {
   const analyzed = (next: Model, sources: RawSources, message: string) => {
     setSession(newSession(next));
     setRaw(sources);
+    // Decisions belong to the file they were made about.
+    setTriage({});
     setFocus(null);
     setUpload(false);
     setActive("Home");
@@ -158,7 +201,15 @@ export default function App() {
     : "No file analyzed yet";
 
   return (
-    <main className={rail.collapsed ? "shell" : "shell railOpen"}>
+    <main
+      className={[
+        "shell",
+        rail.collapsed ? "" : "railOpen",
+        drawerOpen ? "drawerOpen" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <aside className="sidebar">
         <div className="brand">
           <span className="brandmark">P</span>
@@ -176,8 +227,10 @@ export default function App() {
             >
               <span>{ICONS[i]}</span>
               <span className="navLabel">{view}</span>
-              {view === "Quality" && qa && qa.findings.length > 0 && (
-                <em>{qa.findings.length}</em>
+              {/* Outstanding, not total: once a reviewer has settled an issue
+                  the badge should stop asking them to look at it. */}
+              {view === "Quality" && qa && countInbox(qa, triage).outstanding > 0 && (
+                <em>{countInbox(qa, triage).outstanding}</em>
               )}
               {view === "Optimize" && opt && opt.opportunities.length > 0 && (
                 <em>{opt.opportunities.length}</em>
@@ -246,7 +299,16 @@ export default function App() {
           </div>
         </header>
 
+        {/*
+          Two elements, two jobs. `.content` is the scroll container and is
+          always the full width of the region, so its scrollbar sits against
+          the window edge where a scrollbar belongs. `.page` holds the readable
+          column inside it. Capping the scroller itself, as this used to, left
+          a band of dead background down the right of every screen and put the
+          scrollbar in the middle of it.
+        */}
         <div className="content">
+          <div className="page">
           <div className="title">
             <div>
               <h2>{active}</h2>
@@ -273,6 +335,8 @@ export default function App() {
               raw={raw}
               focus={focus}
               goTo={goTo}
+              triage={triage}
+              onTriage={onTriage}
               onApply={(changes) => {
                 setSession((current) =>
                   current ? changes.reduce(addChange, current) : current
@@ -287,6 +351,7 @@ export default function App() {
               onRevertAll={() => setSession((c) => (c ? revertAll(c) : c))}
             />
           )}
+          </div>
         </div>
       </section>
 
@@ -407,6 +472,8 @@ interface ViewProps {
   raw: RawSources | null;
   focus: Focus;
   goTo: (target: FindingTarget) => void;
+  triage: Triage;
+  onTriage: (id: string, state: TriageState) => void;
   onApply: (changes: Change[]) => void;
   onUndo: () => void;
   onRevert: (changeId: string) => void;
@@ -428,6 +495,8 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
   switch (view) {
     case "Home":
       return <Overview {...props} />;
+    case "Queries":
+      return <Queries model={model} onApply={props.onApply} />;
     case "Quality":
       return <QualityChecks {...props} />;
     case "Optimize":
@@ -462,6 +531,8 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
           onApply={props.onApply}
         />
       );
+    case "Settings":
+      return <SettingsView model={model} raw={props.raw} />;
     default:
       return (
         <article className="card placeholder">
@@ -629,64 +700,197 @@ function Overview({ model, qa, goTo }: ViewProps) {
   );
 }
 
-function QualityChecks({ qa, goTo }: ViewProps) {
-  const [category, setCategory] = useState<Category | "All">("All");
-  const [severity, setSeverity] = useState<Severity | "All">("All");
+/**
+ * One issue, stated the way a reviewer needs to read it.
+ *
+ * Four things in a fixed order: what is wrong, which object, why it matters,
+ * what to do. The rule id and the category are still there, but at the bottom
+ * and in small type, because they answer "which check produced this" — a
+ * question that only comes up after the reviewer has decided they care.
+ */
+function IssueCard({
+  finding,
+  state,
+  goTo,
+  onTriage,
+}: {
+  finding: Finding;
+  state: TriageState;
+  goTo: (t: FindingTarget) => void;
+  onTriage: (state: TriageState) => void;
+}) {
+  const object = finding.target.table
+    ? `${finding.target.table}[${finding.target.name}]`
+    : finding.target.name;
 
-  const shown = qa.findings.filter(
-    (f) =>
-      (category === "All" || f.category === category) &&
-      (severity === "All" || f.severity === severity)
+  return (
+    <article className={state === "open" ? "issue" : `issue settled ${state}`}>
+      <div className="issueTop">
+        <i className={`sev ${SEVERITY_CLASS[finding.severity]}`}>{finding.severity}</i>
+        <h3>{finding.title}</h3>
+        {state !== "open" && <span className="issueState">{TRIAGE_LABEL[state]}</span>}
+      </div>
+
+      <dl className="issueFacts">
+        <dt>What&rsquo;s wrong</dt>
+        <dd>{finding.detail}</dd>
+
+        <dt>Which object</dt>
+        <dd>
+          <span className="techName">{object}</span>
+          <span className="srcTag">{finding.target.type}</span>
+          {finding.target.page && <span className="srcTag">on {finding.target.page}</span>}
+        </dd>
+
+        <dt>Why it matters</dt>
+        <dd>{RULE_IMPACT[finding.ruleId] ?? "No impact has been written for this check."}</dd>
+
+        <dt>Recommended action</dt>
+        <dd>{finding.recommendation}</dd>
+      </dl>
+
+      <div className="issueActions">
+        <button className="primarySmall" onClick={() => goTo(finding.target)}>
+          Open object
+        </button>
+        <button
+          className={state === "flagged" ? "on" : ""}
+          onClick={() => onTriage(state === "flagged" ? "open" : "flagged")}
+        >
+          {state === "flagged" ? "Unflag" : "⚑ Flag issue"}
+        </button>
+        <button
+          className={state === "resolved" ? "on" : ""}
+          onClick={() => onTriage(state === "resolved" ? "open" : "resolved")}
+        >
+          {state === "resolved" ? "Reopen" : "✓ Resolve"}
+        </button>
+        <button
+          className={state === "ignored" ? "on" : ""}
+          onClick={() => onTriage(state === "ignored" ? "open" : "ignored")}
+          title="The check is right about the file, but this is deliberate here."
+        >
+          {state === "ignored" ? "Reopen" : "Accepted design"}
+        </button>
+        <small className="issueRule">
+          {finding.category} · {finding.ruleId}
+        </small>
+      </div>
+    </article>
   );
+}
+
+/** How many issues one severity shows before asking. */
+const ISSUE_PAGE = 25;
+
+/**
+ * One severity's queue, rendered a page at a time.
+ *
+ * A large report produces hundreds of findings, and an issue card is a
+ * detailed thing: four labelled facts and five buttons, about twenty elements
+ * each. Rendering four hundred of them put ten thousand nodes on the page and
+ * blocked the main thread for over half a second — the screen appeared to hang
+ * on exactly the reports that need it most.
+ *
+ * Nothing is hidden silently. The heading always states the true total, and the
+ * button says how many more there are, so a bounded render never reads as a
+ * complete one.
+ */
+function IssueSection({
+  severity,
+  findings,
+  triage,
+  goTo,
+  onTriage,
+}: {
+  severity: Severity;
+  findings: Finding[];
+  triage: Triage;
+  goTo: (t: FindingTarget) => void;
+  onTriage: (id: string, state: TriageState) => void;
+}) {
+  const [limit, setLimit] = useState(ISSUE_PAGE);
+  const shown = findings.slice(0, limit);
+  const rest = findings.length - shown.length;
+
+  return (
+    <section className="issueGroup">
+      <h2 className={`issueHeading ${SEVERITY_CLASS[severity]}`}>
+        {severity}
+        <em>
+          {findings.length} issue{findings.length === 1 ? "" : "s"}
+          {rest > 0 && ` · showing ${shown.length}`}
+        </em>
+      </h2>
+
+      {shown.map((finding) => (
+        <IssueCard
+          key={finding.id}
+          finding={finding}
+          state={stateOf(triage, finding)}
+          goTo={goTo}
+          onTriage={(state) => onTriage(finding.id, state)}
+        />
+      ))}
+
+      {rest > 0 && (
+        <div className="issueMore">
+          <button onClick={() => setLimit((n) => n + ISSUE_PAGE)}>
+            Show {Math.min(rest, ISSUE_PAGE)} more
+          </button>
+          <button onClick={() => setLimit(findings.length)}>Show all {findings.length}</button>
+          <span>{rest} not shown yet</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The quality screen, as an inbox rather than a report.
+ *
+ * Everything a reviewer must decide about is at the top, worst first. The
+ * score and the way it is calculated are still available, but folded away:
+ * they describe the file, and no reviewer has ever fixed anything by reading a
+ * weighting. Findings that have been settled drop out of the queue rather than
+ * disappearing, so a decision can always be taken back.
+ */
+function QualityChecks({ qa, goTo, triage, onTriage }: ViewProps) {
+  const [category, setCategory] = useState<Category | "All">("All");
+  const [showSettled, setShowSettled] = useState(false);
+  const [showScoring, setShowScoring] = useState(false);
+
+  const counts = countInbox(qa, triage);
+
+  const inScope = qa.findings.filter((f) => category === "All" || f.category === category);
+  const queue = inScope.filter((f) => isOutstanding(stateOf(triage, f)));
+  const settled = inScope.filter((f) => !isOutstanding(stateOf(triage, f)));
+  const groups = groupBySeverity(queue);
 
   return (
     <div className="checks">
-      <article className="card ruleSummary">
+      <article className="card checksWide">
         <Head
-          over="AUTOMATED QA"
-          title={`${qa.rulesRun} rules evaluated · ${qa.findings.length} finding${
-            qa.findings.length === 1 ? "" : "s"
-          }`}
+          over="ISSUES"
+          title={
+            counts.outstanding === 0
+              ? "Nothing outstanding"
+              : `${counts.outstanding} issue${counts.outstanding === 1 ? "" : "s"} to review`
+          }
         />
-        <div className="qualityTop">
-          <ScoreRing score={qa.overall} />
-          <div>
-            <i>
-              {scoreLabel(qa.overall)}
-              {qa.categories.some((c) => c.score === null) && " · partial"}
-            </i>
-            <p>
-              The mean of the categories that could be assessed. A category whose rules could not
-              run scores nothing at all, rather than defaulting to a pass.
-            </p>
-          </div>
-        </div>
-        <ScoreBars
-          bars={qa.categories.map((c) => ({
-            label: c.category,
-            score: c.score,
-            reason: c.reason,
-          }))}
-        />
-
         <div className="counts">
           {SEVERITY_ORDER.map((level) => (
             <div key={level}>
-              <b>{qa.counts[level]}</b>
+              <b>{counts.bySeverity[level]}</b>
               <small>{level}</small>
             </div>
           ))}
+          <div>
+            <b>{counts.resolved + counts.ignored}</b>
+            <small>settled</small>
+          </div>
         </div>
 
-        <p className="scoreNote">
-          Each score is the share of that category&rsquo;s objects with no problem, weighted by the
-          worst problem on each: a critical finding writes an object off entirely, high counts 0.6,
-          medium 0.3, low 0.1. Totalling penalties instead sent every large report to zero
-          regardless of how good it was.
-        </p>
-      </article>
-
-      <article className="card explorer checksWide">
         <div className="toolbar">
           <div className="filter">
             <select
@@ -701,58 +905,341 @@ function QualityChecks({ qa, goTo }: ViewProps) {
               ))}
             </select>
           </div>
-          <select value={severity} onChange={(e) => setSeverity(e.target.value as Severity | "All")}>
-            <option value="All">All severities</option>
-            {SEVERITY_ORDER.map((level) => (
-              <option key={level} value={level}>
-                {level}
-              </option>
-            ))}
-          </select>
-          <button>
-            {shown.length} of {qa.findings.length}
+          <button className={showSettled ? "on" : ""} onClick={() => setShowSettled((v) => !v)}>
+            {showSettled ? "Hide settled" : `Show settled (${settled.length})`}
           </button>
         </div>
+      </article>
 
-        {shown.length === 0 ? (
-          <p>No findings match this filter.</p>
+      {queue.length === 0 && (
+        <article className="card checksWide">
+          <p className="emptyNote">
+            {qa.findings.length === 0
+              ? `All ${qa.rulesRun} checks passed on this file.`
+              : "Every issue in this category has been resolved or accepted."}
+          </p>
+        </article>
+      )}
+
+      {groups.map(
+        (group) =>
+          group.findings.length > 0 && (
+            <IssueSection
+              key={group.severity}
+              severity={group.severity}
+              findings={group.findings}
+              triage={triage}
+              goTo={goTo}
+              onTriage={onTriage}
+            />
+          )
+      )}
+
+      {showSettled && settled.length > 0 && (
+        <section className="issueGroup">
+          <h2 className="issueHeading">
+            Settled
+            <em>resolved or accepted as designed</em>
+          </h2>
+          {settled.map((finding) => (
+            <IssueCard
+              key={finding.id}
+              finding={finding}
+              state={stateOf(triage, finding)}
+              goTo={goTo}
+              onTriage={(state) => onTriage(finding.id, state)}
+            />
+          ))}
+        </section>
+      )}
+
+      <article className="card checksWide">
+        <button className="disclosure" onClick={() => setShowScoring((v) => !v)}>
+          <span className="caret">{showScoring ? "▼" : "▶"}</span>
+          Technical details — scoring, rules not run, and what is out of scope
+        </button>
+
+        {showScoring && (
+          <div className="disclosureBody">
+            <div className="qualityTop">
+              <ScoreRing score={qa.overall} />
+              <div>
+                <i>
+                  {scoreLabel(qa.overall)}
+                  {qa.categories.some((c) => c.score === null) && " · partial"}
+                </i>
+                <p>
+                  The mean of the categories that could be assessed. A category whose rules could
+                  not run scores nothing at all, rather than defaulting to a pass. Resolving or
+                  accepting an issue does not change the score — the score describes the file.
+                </p>
+              </div>
+            </div>
+
+            <ScoreBars
+              bars={qa.categories.map((c) => ({
+                label: c.category,
+                score: c.score,
+                reason: c.reason,
+              }))}
+            />
+
+            <p className="scoreNote">
+              Each score is the share of that category&rsquo;s objects with no problem, weighted by
+              the worst problem on each: a critical finding writes an object off entirely, high
+              counts 0.6, medium 0.3, low 0.1. Totalling penalties instead sent every large report
+              to zero regardless of how good it was. {qa.rulesRun} rules were evaluated.
+            </p>
+
+            {qa.skipped.length > 0 && (
+              <>
+                <h3>{qa.skipped.length} rules could not run on this file</h3>
+                <p className="scoreNote">{qa.skipped[0].reason}</p>
+                <ul className="notAssessed">
+                  {qa.skipped.map((rule) => (
+                    <li key={rule.ruleId}>
+                      {rule.category} · {rule.ruleId} — {rule.title}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            <h3>Not assessed by any rule</h3>
+            <ul className="notAssessed">
+              {qa.notAssessed.map((item) => (
+                <li key={item.check}>
+                  {item.category} · {item.check}
+                </li>
+              ))}
+            </ul>
+            <p className="scoreNote">
+              These need a live query engine. Nothing is executed against the model in this build,
+              so they are neither checked nor scored.
+            </p>
+          </div>
+        )}
+      </article>
+    </div>
+  );
+}
+
+/**
+ * What the scanner read, and what it walked past.
+ *
+ * A tool that analyses a file owes the reader an account of how much of that
+ * file it actually looked at. Without one, silence is ambiguous: "no row-level
+ * security findings" could mean the model has none, or could mean nobody
+ * looked. This screen removes the ambiguity by naming both.
+ */
+function SettingsView({ model, raw }: { model: Model; raw: RawSources | null }) {
+  const coverage = useMemo(
+    () => (raw?.modelSchema ? auditModelCoverage(raw.modelSchema, model) : null),
+    [raw, model]
+  );
+
+  const calculationGroups = model.tables.filter((t) => t.calculationGroup);
+  const hierarchies = model.tables.flatMap((t) => t.hierarchies);
+  const declaredKpis = allMeasures(model).filter((m) => m.kpi);
+  const incremental = model.tables.filter((t) => t.refreshPolicy);
+
+  /** Constructs that change what a measure returns or what a reader sees. */
+  const found: Array<[string, number, string]> = [
+    [
+      "Calculation groups",
+      calculationGroups.length,
+      "A calculation item rewrites how every measure evaluates, so a review that cannot see one can be confidently wrong about any number in the report.",
+    ],
+    [
+      "Row-level security roles",
+      model.roles.length,
+      "Each role filters what a reader is allowed to see. The filters are read and shown; this build does not evaluate what they let through.",
+    ],
+    [
+      "Hierarchies",
+      hierarchies.length,
+      "Levels are columns, so a column used only by a hierarchy is still in use.",
+    ],
+    [
+      "Declared KPIs",
+      declaredKpis.length,
+      "A KPI the model states outright, as opposed to a business name inferred from a caption on a page.",
+    ],
+    [
+      "Shared queries and parameters",
+      model.expressions.length,
+      "Model-level Power Query that other queries reference — a server name or a date parameter usually lives here.",
+    ],
+    [
+      "Tables under incremental refresh",
+      incremental.length,
+      "These do not hold every row their query implies, so a statement about their grain has to be read differently.",
+    ],
+  ];
+
+  return (
+    <>
+      <article className="card checksWide">
+        <Head over="EXTRACTION" title="What was read from this file" />
+        <p className="scoreNote">
+          Everything on every screen comes from the file you uploaded. Nothing is fetched, nothing
+          is sent anywhere, and nothing is generated to fill a gap.
+        </p>
+
+        {coverage ? (
+          <ul className="auditList">
+            {coverage.counts.map((c) => (
+              <li key={c.kind} className={c.ok ? "auditPass" : "auditFail"}>
+                <span aria-hidden="true">{c.ok ? "✓" : "✕"}</span>
+                <div>
+                  <b>
+                    {c.kind[0].toUpperCase()}
+                    {c.kind.slice(1)}
+                  </b>
+                  <p>
+                    {c.ok
+                      ? `All ${c.inFile} in the file were read into the model.`
+                      : `${c.inFile} in the file, ${c.inModel} in the model — ${
+                          c.inFile - c.inModel
+                        } were not read.`}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : (
-          shown.map((finding) => <FindingRow key={finding.id} finding={finding} goTo={goTo} />)
+          <p className="emptyNote">
+            No semantic model was readable in this file, so there is nothing to account for. A
+            .pbix stores its model in a compressed Analysis Services part that cannot be opened in
+            a browser.
+          </p>
         )}
       </article>
 
-      {qa.skipped.length > 0 && (
+      <article className="card checksWide">
+        <Head over="MODEL CONSTRUCTS" title="Things that change what the numbers mean" />
+        <p className="scoreNote">
+          A zero here is a finding, not a blank. It means the scanner looked and this file does not
+          contain one.
+        </p>
+        <div className="constructGrid">
+          {found.map(([label, n, why]) => (
+            <div key={label} className={n > 0 ? "construct has" : "construct"}>
+              <b>{n}</b>
+              <small>{label}</small>
+              <p>{why}</p>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      {model.roles.length > 0 && (
         <article className="card checksWide">
-          <Head over="NOT RUN" title={`${qa.skipped.length} rules skipped`} />
-          <div className="unavailable">
-            <b>These rules could not run on this file</b>
-            <p>{qa.skipped[0].reason}</p>
-          </div>
+          <Head over="ROW-LEVEL SECURITY" title={`${model.roles.length} role(s) defined`} />
+          {model.roles.map((role) => (
+            <div className="measureRow" key={role.name}>
+              <div className="measureTop">
+                <b>{role.name}</b>
+                {role.modelPermission && <span className="srcTag">{role.modelPermission}</span>}
+              </div>
+              {role.tableFilters.length === 0 ? (
+                <div className="measureMeta">This role applies no table filter.</div>
+              ) : (
+                role.tableFilters.map((filter) => (
+                  <div className="measureMeta" key={filter.table}>
+                    <span className="techName">{filter.table}</span> {filter.filterExpression}
+                  </div>
+                ))
+              )}
+            </div>
+          ))}
+        </article>
+      )}
+
+      {calculationGroups.length > 0 && (
+        <article className="card checksWide">
+          <Head
+            over="CALCULATION GROUPS"
+            title={`${calculationGroups.length} group(s) affecting every measure`}
+          />
+          {calculationGroups.map((table) => (
+            <Collapsible
+              key={table.name}
+              summary={
+                <>
+                  <b>{table.name}</b>
+                  <span className="srcTag">
+                    precedence {table.calculationGroup?.precedence ?? "unset"}
+                  </span>
+                  <span className="kpiTag low">
+                    {table.calculationGroup?.items.length ?? 0} items
+                  </span>
+                </>
+              }
+            >
+              {() =>
+                table.calculationGroup?.items.map((item) => (
+                  <div className="measureRow" key={item.name}>
+                    <div className="measureTop">
+                      <b>{item.name}</b>
+                    </div>
+                    <CodeEditor
+                      value={item.expression}
+                      language="dax"
+                      readOnly
+                      minHeight={90}
+                      label={item.name}
+                    />
+                  </div>
+                ))
+              }
+            </Collapsible>
+          ))}
+        </article>
+      )}
+
+      {coverage && (
+        <article className="card checksWide">
+          <Collapsible
+            summary={<span>Properties present in the file that the model does not carry</span>}
+            count={coverage.ignored.length + coverage.unvisitedModelKeys.length}
+          >
+            {() => (
+              <>
+                <p className="scoreNote">
+                  These are read past, not lost. An export repacks your original archive and
+                  replaces only the documents that changed, so everything listed here is written
+                  back exactly as it arrived. The list exists so that nothing on any other screen
+                  can be mistaken for a statement about something the scanner never looked at.
+                </p>
+                <ul className="notAssessed">
+                  {coverage.ignored.map((item) => (
+                    <li key={`${item.kind}.${item.property}`}>
+                      {item.kind}.{item.property}
+                      {item.occurrences > 1 ? ` · ${item.occurrences} occurrences` : ""}
+                    </li>
+                  ))}
+                  {coverage.unvisitedModelKeys.map((key) => (
+                    <li key={key}>model.{key}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Collapsible>
+        </article>
+      )}
+
+      {model.warnings.length > 0 && (
+        <article className="card checksWide">
+          <Head over="EXTRACTION NOTES" title={`${model.warnings.length} note(s)`} />
           <ul className="notAssessed">
-            {qa.skipped.map((rule) => (
-              <li key={rule.ruleId}>
-                {rule.category} · {rule.ruleId} — {rule.title}
-              </li>
+            {model.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
             ))}
           </ul>
         </article>
       )}
-
-      <article className="card checksWide">
-        <Head over="OUT OF SCOPE" title="Not assessed by any rule" />
-        <ul className="notAssessed">
-          {qa.notAssessed.map((item) => (
-            <li key={item.check}>
-              {item.category} · {item.check}
-            </li>
-          ))}
-        </ul>
-        <p className="scoreNote">
-          These need a live query engine. Nothing is executed against the model in this build, so
-          they are neither checked nor scored.
-        </p>
-      </article>
-    </div>
+    </>
   );
 }
 

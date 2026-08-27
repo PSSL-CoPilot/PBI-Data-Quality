@@ -10,7 +10,7 @@
  * nothing in the file states the link between `M Unique Sales` and the heading
  * a reader sees.
  */
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 
 import { rewriteAsChange, type OptimizationResult, type Opportunity } from "../lib/optimize/engine.ts";
 import type { Change } from "../lib/edit/session.ts";
@@ -24,12 +24,14 @@ import {
   type MeasureSources,
   type VisualBinding,
 } from "../lib/powerbi/sources.ts";
-import { findMeasureReferences, findUsage, usageLabel } from "../lib/powerbi/usage.ts";
+import { buildMeasureReferenceIndex, UsageIndex, usageLabel } from "../lib/powerbi/usage.ts";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { MeasureEditor } from "./Editor.tsx";
+import { useDrawerPresence } from "./drawer.tsx";
+import { Collapsible } from "./ui.tsx";
 
-type Mode = "All" | "By Report" | "By PBI Table";
-const MODES: Mode[] = ["All", "By Report", "By PBI Table"];
+type Mode = "By Report" | "By PBI Table" | "All";
+const MODES: Mode[] = ["By Report", "By PBI Table", "All"];
 
 export type Focus = { type: string; name: string; table?: string; page?: string } | null;
 
@@ -40,24 +42,53 @@ interface Analysis {
   kpis: ReturnType<typeof inferKpiNames>;
   sources: Map<string, MeasureSources>;
   rewriteFor: Map<string, Opportunity>;
+  /** One pass over the report, shared by every row that asks "used where?". */
+  usage: UsageIndex;
+  /** Measure name to the measures that call it, built once. */
+  callers: Map<string, string[]>;
+}
+
+type Kpi = NonNullable<ReturnType<typeof bestKpiName>>;
+
+/** Where an inferred business name came from, in one sentence. */
+function kpiReason(kpi: Kpi): string {
+  const from = kpi.source === "visual-title" ? "the title of a visual" : "the nearest caption";
+  const near = kpi.distance !== undefined ? `, ${kpi.distance}px away` : "";
+  return `This name was read from ${from} on ${kpi.pageDisplayName}${near}. The report does not state a business name for this measure, so this is an informed guess rather than something the file declares.`;
+}
+
+/** An unobtrusive "why does it say that" marker. */
+function InfoDot({ text }: { text: string }) {
+  return (
+    <span className="infoDot" title={text} role="img" aria-label={text}>
+      i
+    </span>
+  );
+}
+
+/**
+ * A measure's name, business-first.
+ *
+ * Functional users recognise "Revenue this year", not `[MTD_Rev_Amt_v2]`, so
+ * the inferred business name leads and the technical name follows it. When
+ * nothing could be inferred the technical name is all there is, and it leads.
+ */
+function MeasureName({ kpi, name }: { kpi: Kpi | undefined; name: string }) {
+  if (!kpi) return <b>{name}</b>;
+  return (
+    <>
+      <b className={kpi.confidence === "low" ? "bizName weak" : "bizName"}>{kpi.label}</b>
+      <span className="techName">{name}</span>
+      <InfoDot text={kpiReason(kpi)} />
+    </>
+  );
 }
 
 function SourceTags({ analysis, measure }: { analysis: Analysis; measure: Measure }) {
-  const kpi = bestKpiName(analysis.kpis, measure.table, measure.name);
   const sources = analysis.sources.get(`${measure.table}[${measure.name}]`);
 
   return (
     <>
-      {kpi && (
-        <span
-          className={kpi.confidence === "low" ? "kpiTag low" : "kpiTag"}
-          title={`From the ${
-            kpi.source === "visual-title" ? "visual title" : "nearest caption"
-          } on ${kpi.pageDisplayName}${kpi.distance !== undefined ? `, ${kpi.distance}px away` : ""}`}
-        >
-          Likely KPI: {kpi.label}
-        </span>
-      )}
       {sources?.primary ? (
         <span className="srcTag" title={sources.reason}>
           Source: {sources.primary}
@@ -72,13 +103,11 @@ function SourceTags({ analysis, measure }: { analysis: Analysis; measure: Measur
 }
 
 function MeasureRow({
-  model,
   measure,
   analysis,
   onOpen,
   onOptimize,
 }: {
-  model: Model;
   measure: Measure;
   analysis: Analysis;
   onOpen: (measure: Measure) => void;
@@ -88,18 +117,18 @@ function MeasureRow({
   const key = `${measure.table}[${measure.name}]`;
   const sources = analysis.sources.get(key);
   const rewrite = analysis.rewriteFor.get(key);
-  const usage = findUsage(model, "measure", measure.table, measure.name);
+  const usage = analysis.usage.find("measure", measure.table, measure.name);
 
   return (
     <div className="measureRow">
       <div className="measureTop">
-        <b>ƒ {measure.name}</b>
+        <MeasureName kpi={bestKpiName(analysis.kpis, measure.table, measure.name)} name={measure.name} />
         <SourceTags analysis={analysis} measure={measure} />
         <span className="srcTag">Home: {measure.table}</span>
       </div>
 
       <div className="measureMeta">
-        {usageLabel(usage, findMeasureReferences(model, measure.name))}
+        {usageLabel(usage, analysis.callers.get(measure.name) ?? [])}
         {sources?.reason ? ` · ${sources.reason}` : ""}
       </div>
 
@@ -172,10 +201,20 @@ function VisualBindingRow({
               ? `${bound.measure.table}[${bound.measure.name}]`
               : `${bound.boundTable ?? "?"}[${bound.name}]`;
             const rewrite = bound.measure ? analysis.rewriteFor.get(key) : undefined;
+            const boundKpi = bestKpiName(
+              analysis.kpis,
+              bound.measure?.table ?? bound.boundTable ?? "",
+              bound.name
+            );
             return (
               <div className="bindRow" key={`${visual.visualId}-${key}`}>
                 <span className="arrow">→</span>
-                <b>[{bound.name}]</b>
+                {/* The visual heading right above already says it; repeating
+                    the same words on the next line only reads as a stutter. */}
+                <MeasureName
+                  kpi={boundKpi?.label === label ? undefined : boundKpi}
+                  name={bound.name}
+                />
                 {bound.boundTable && <span className="srcTag">{bound.boundTable}</span>}
                 {bound.measure ? (
                   <>
@@ -218,21 +257,30 @@ function Group({
   title: string;
   note?: string;
   count: number;
-  children: React.ReactNode;
+  /** A thunk, so a collapsed page costs nothing to render. */
+  children: () => React.ReactNode;
 }) {
-  const [open, setOpen] = useState(true);
+  /*
+   * Closed on arrival, like every other expandable section in the app. A
+   * sixteen-page report opened as sixteen expanded pages of visuals, which put
+   * several hundred rows on screen before the reviewer had asked for any of
+   * them — slow to render and impossible to scan.
+   */
   return (
-    <article className="groupCard">
-      <button className="groupHead" onClick={() => setOpen((v) => !v)}>
-        <span className="caret">{open ? "▼" : "▶"}</span>
-        <b>{title}</b>
-        <em>
-          {count} measure{count === 1 ? "" : "s"}
-          {note ? ` · ${note}` : ""}
-        </em>
-      </button>
-      {open && <div className="groupBody">{children}</div>}
-    </article>
+    <Collapsible
+      className="groupCard"
+      summary={
+        <>
+          <b>{title}</b>
+          <em className="groupNote">
+            {count} measure{count === 1 ? "" : "s"}
+            {note ? ` · ${note}` : ""}
+          </em>
+        </>
+      }
+    >
+      {children}
+    </Collapsible>
   );
 }
 
@@ -247,8 +295,16 @@ export function Measures({
   opt: OptimizationResult;
   onApply: (changes: Change[]) => void;
 }) {
-  const [mode, setMode] = useState<Mode>("All");
+  const [mode, setMode] = useState<Mode>("By Report");
+  /*
+   * The box stays controlled by `query`, so a keystroke always shows
+   * immediately. Filtering reads the deferred copy instead, which React may
+   * render late and abandon when the next keystroke arrives — without it every
+   * character re-filtered the whole model and cost about 90ms, which is five
+   * dropped frames per letter.
+   */
   const [query, setQuery] = useState("");
+  const search = useDeferredValue(query);
   const [selected, setSelected] = useState<Measure | null>(() =>
     focus?.type === "measure"
       ? (allMeasures(model).find(
@@ -266,12 +322,24 @@ export function Measures({
         if (!rewriteFor.has(key)) rewriteFor.set(key, item);
       }
     }
-    return { kpis: inferKpiNames(model), sources: analyseMeasureSources(model), rewriteFor };
+    return {
+      kpis: inferKpiNames(model),
+      sources: analyseMeasureSources(model),
+      rewriteFor,
+      usage: new UsageIndex(model),
+      callers: buildMeasureReferenceIndex(model),
+    };
   }, [model, opt]);
 
-  const measures = allMeasures(model);
+  const measures = useMemo(() => allMeasures(model), [model]);
+  const byPage = useMemo(() => groupMeasuresByPage(model), [model]);
+  const bySourceTable = useMemo(
+    () => groupMeasuresBySourceTable(model, analysis.sources),
+    [model, analysis.sources]
+  );
+  const orphans = useMemo(() => measuresNotOnAnyPage(model), [model]);
   const matches = (measure: Measure) => {
-    const needle = query.trim().toLowerCase();
+    const needle = search.trim().toLowerCase();
     if (!needle) return true;
     const kpi = bestKpiName(analysis.kpis, measure.table, measure.name)?.label ?? "";
     return `${measure.name} ${measure.table} ${measure.expression} ${kpi}`
@@ -281,7 +349,7 @@ export function Measures({
 
   /** Search by name alone, for bindings whose model definition may be absent. */
   const matchesName = (name: string) => {
-    const needle = query.trim().toLowerCase();
+    const needle = search.trim().toLowerCase();
     return needle ? name.toLowerCase().includes(needle) : true;
   };
 
@@ -292,7 +360,7 @@ export function Measures({
     if (change) onApply([change]);
   };
 
-  const rowProps = { model, analysis, onOpen: setSelected, onOptimize: optimize };
+  const rowProps = { analysis, onOpen: setSelected, onOptimize: optimize };
 
   return (
     <>
@@ -326,7 +394,7 @@ export function Measures({
           <table>
             <thead>
               <tr>
-                {["Measure name", "Likely KPI", "Home table", "Source tables", "DAX", "Used on"].map(
+                {["Business name", "Measure name", "Home table", "Source tables", "DAX", "Used on"].map(
                   (h) => (
                     <th key={h}>{h}</th>
                   )
@@ -338,7 +406,7 @@ export function Measures({
                 const key = `${measure.table}[${measure.name}]`;
                 const kpi = bestKpiName(analysis.kpis, measure.table, measure.name);
                 const sources = analysis.sources.get(key);
-                const usage = findUsage(model, "measure", measure.table, measure.name);
+                const usage = analysis.usage.find("measure", measure.table, measure.name);
                 const focused = focus?.type === "measure" && focus.name === measure.name;
                 return (
                   <tr
@@ -347,9 +415,20 @@ export function Measures({
                     onClick={() => setSelected(measure)}
                   >
                     <td>
-                      <b>ƒ {measure.name}</b>
+                      {kpi ? (
+                        <>
+                          <b className={kpi.confidence === "low" ? "bizName weak" : "bizName"}>
+                            {kpi.label}
+                          </b>
+                          <InfoDot text={kpiReason(kpi)} />
+                        </>
+                      ) : (
+                        <span className="advisory">Not named in the report</span>
+                      )}
                     </td>
-                    <td>{kpi ? kpi.label : "—"}</td>
+                    <td>
+                      <span className="techName">{measure.name}</span>
+                    </td>
                     <td>{measure.table}</td>
                     <td>{sources?.primary ?? sources?.all.slice(0, 2).join(", ") ?? "—"}</td>
                     <td>{measure.expression.replace(/\s+/g, " ").slice(0, 60)}</td>
@@ -366,7 +445,7 @@ export function Measures({
 
       {mode === "By Report" && (
         <>
-          {groupMeasuresByPage(model).map((group) => {
+          {byPage.map((group) => {
             const visuals = group.visuals.filter((v) =>
               v.measures.some((m) => matchesName(m.name)) || matchesName(v.title ?? "")
             );
@@ -386,6 +465,8 @@ export function Measures({
                   .join(" · ")}
                 count={shownMeasures.length}
               >
+                {() => (
+                  <>
                 {visuals.length === 0 ? (
                   <p className="emptyNote">
                     {group.visuals.length === 0
@@ -411,17 +492,25 @@ export function Measures({
                     {group.unresolved.join(", ")}
                   </p>
                 )}
+                  </>
+                )}
               </Group>
             );
           })}
 
           {(() => {
-            const orphans = measuresNotOnAnyPage(model).filter(matches);
-            return orphans.length > 0 ? (
-              <Group title="Not on any page" count={orphans.length}>
-                {orphans.map((measure) => (
-                  <MeasureRow key={`${measure.table}.${measure.name}`} measure={measure} {...rowProps} />
-                ))}
+            const shown = orphans.filter(matches);
+            return shown.length > 0 ? (
+              <Group title="Not on any page" count={shown.length}>
+                {() =>
+                  shown.map((measure) => (
+                    <MeasureRow
+                      key={`${measure.table}.${measure.name}`}
+                      measure={measure}
+                      {...rowProps}
+                    />
+                  ))
+                }
               </Group>
             ) : null;
           })()}
@@ -429,7 +518,7 @@ export function Measures({
       )}
 
       {mode === "By PBI Table" &&
-        groupMeasuresBySourceTable(model, analysis.sources).map((group) => {
+        bySourceTable.map((group) => {
           const shown = group.measures.filter(matches);
           if (shown.length === 0) return null;
           return (
@@ -443,9 +532,15 @@ export function Measures({
               }
               count={shown.length}
             >
-              {shown.map((measure) => (
-                <MeasureRow key={`${measure.table}.${measure.name}`} measure={measure} {...rowProps} />
-              ))}
+              {() =>
+                shown.map((measure) => (
+                  <MeasureRow
+                    key={`${measure.table}.${measure.name}`}
+                    measure={measure}
+                    {...rowProps}
+                  />
+                ))
+              }
             </Group>
           );
         })}
@@ -482,10 +577,12 @@ function MeasureDrawer({
   onApply: (changes: Change[]) => void;
   onOptimize: (opportunity: Opportunity) => void;
 }) {
+  // Tells the shell to make room, so the list beside this stays readable.
+  useDrawerPresence();
   const [editing, setEditing] = useState(false);
   const key = `${measure.table}[${measure.name}]`;
-  const usage = findUsage(model, "measure", measure.table, measure.name);
-  const daxRefs = findMeasureReferences(model, measure.name);
+  const usage = analysis.usage.find("measure", measure.table, measure.name);
+  const daxRefs = analysis.callers.get(measure.name) ?? [];
   const kpi = bestKpiName(analysis.kpis, measure.table, measure.name);
   const sources = analysis.sources.get(key);
   const rewrite = analysis.rewriteFor.get(key);
@@ -495,12 +592,18 @@ function MeasureDrawer({
       <div className="drawerHead">
         <div>
           <small>MEASURE</small>
-          <h2>{measure.name}</h2>
+          <h2>
+            {kpi ? kpi.label : measure.name}
+            {kpi && <InfoDot text={kpiReason(kpi)} />}
+          </h2>
+          {kpi && <span className="techName">{measure.name}</span>}
         </div>
-        <button onClick={close}>×</button>
+        <button onClick={close} aria-label="Close">
+          ×
+        </button>
       </div>
 
-      <div className="tabs">
+      <div className="drawerTabs">
         <button className={editing ? "" : "on"} onClick={() => setEditing(false)}>
           Overview
         </button>
@@ -509,6 +612,7 @@ function MeasureDrawer({
         </button>
       </div>
 
+      <div className="drawerBody">
       {editing ? (
         <MeasureEditor
           model={model}
@@ -518,17 +622,9 @@ function MeasureDrawer({
         />
       ) : (
         <>
-          <div className="measureTop" style={{ marginTop: 12 }}>
+          <div className="measureTop">
             <SourceTags analysis={analysis} measure={measure} />
           </div>
-          {kpi && (
-            <p className="measureMeta">
-              Inferred from the {kpi.source === "visual-title" ? "visual title" : "nearest caption"}{" "}
-              on {kpi.pageDisplayName}
-              {kpi.distance !== undefined ? `, ${kpi.distance}px away` : ""}. This is a guess, not a
-              stated name.
-            </p>
-          )}
           {sources && <p className="measureMeta">{sources.reason}</p>}
 
           {rewrite && (
@@ -577,9 +673,12 @@ function MeasureDrawer({
           </div>
         </>
       )}
+      </div>
 
       <div className="drawerFoot">
-        <button onClick={close}>Done</button>
+        <button className="primarySmall" onClick={close}>
+          Done
+        </button>
       </div>
     </div>
   );

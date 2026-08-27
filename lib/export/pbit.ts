@@ -12,7 +12,7 @@
  * probably worked" is not a state this module can return.
  */
 import type { Change } from "../edit/apply.ts";
-import { validateReferences } from "../edit/session.ts";
+import { auditExport, type AuditCheck } from "./audit.ts";
 import { extract, type RawSources } from "../powerbi/extract.ts";
 import { allMeasures, type Model } from "../powerbi/model.ts";
 import { encodeUtf16, encodeUtf8, readZip, writeZip } from "../powerbi/zip.ts";
@@ -25,6 +25,12 @@ export interface ExportResult {
   fileName?: string;
   /** Why the export could not be produced or could not be trusted. */
   problems: string[];
+  /**
+   * Every check the audit ran, pass or fail. Present whenever the file was
+   * produced and re-opened, so a refusal shows what else was verified rather
+   * than only what went wrong.
+   */
+  checks?: AuditCheck[];
   /** What the verification pass confirmed, for display. */
   verified?: {
     tables: number;
@@ -56,19 +62,17 @@ export function exportFileName(original: string): string {
 }
 
 /**
- * Objects the change list says should exist afterwards, used to confirm the
- * exported file really contains the edits rather than assuming it does.
+ * Repack, re-open, and audit.
+ *
+ * `expected` is the original model with every change applied — the file we
+ * meant to produce. The audit compares the archive that was actually written
+ * against it, and a single failed check means no download.
  */
-function expectedRenames(changes: Change[]): Array<{ type: string; name: string }> {
-  return changes
-    .filter((c) => c.field === "name")
-    .map((c) => ({ type: c.target.type, name: c.after }));
-}
-
 export async function exportUpdatedFile(
   raw: RawSources,
   original: Model,
-  changes: Change[]
+  changes: Change[],
+  expected: Model
 ): Promise<ExportResult> {
   const problems: string[] = [];
 
@@ -144,47 +148,26 @@ export async function exportUpdatedFile(
     };
   }
 
-  const measureNames = new Set(allMeasures(reopened).map((m) => m.name));
-  const tableNames = new Set(reopened.tables.map((t) => t.name));
-  const columnNames = new Set(
-    reopened.tables.flatMap((t) => t.columns.map((c) => c.name))
-  );
-
-  const found: string[] = [];
-  for (const expected of expectedRenames(changes)) {
-    const present =
-      expected.type === "measure"
-        ? measureNames.has(expected.name)
-        : expected.type === "table"
-          ? tableNames.has(expected.name)
-          : columnNames.has(expected.name);
-    if (present) found.push(expected.name);
-    else problems.push(`"${expected.name}" is missing from the exported file.`);
+  const report = auditExport(original, expected, reopened, changes);
+  if (!report.ok) {
+    return { ok: false, problems: report.problems, checks: report.checks };
   }
 
-  // A pre-existing problem is not this export's fault; a new one is.
-  const before = new Set(validateReferences(original).problems.map((p) => p.id));
-  const introduced = validateReferences(reopened).problems.filter((p) => !before.has(p.id));
-  for (const problem of introduced) {
-    problems.push(
-      `The exported file has a broken reference: ${
-        problem.target.table ? `${problem.target.table}[${problem.target.name}]` : problem.target.name
-      } — ${problem.detail}`
-    );
-  }
-
-  if (problems.length > 0) return { ok: false, problems };
+  const renamedObjectsFound = changes
+    .filter((c) => c.field === "name" && c.before !== c.after)
+    .map((c) => c.after);
 
   return {
     ok: true,
     bytes,
     fileName,
     problems: [],
+    checks: report.checks,
     verified: {
       tables: reopened.tables.length,
       measures: allMeasures(reopened).length,
       pages: reopened.pages.length,
-      renamedObjectsFound: found,
+      renamedObjectsFound,
     },
   };
 }

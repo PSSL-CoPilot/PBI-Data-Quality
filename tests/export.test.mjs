@@ -126,7 +126,7 @@ test("a renamed measure is really in the exported file", async () => {
     rename("c1", "measure", "FactSales", "Cross Sales", "Unique Sales"),
   ]);
 
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   assert.deepEqual(result.problems, []);
   assert.equal(result.ok, true);
   assert.equal(result.fileName, "Sales (edited).pbit");
@@ -154,7 +154,7 @@ test("parts this build never parses survive the round trip byte for byte", async
     rename("c1", "measure", "FactSales", "Cross Sales", "Unique Sales"),
   ]);
 
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   const exportedParts = unzipSync(result.bytes);
 
   assert.deepEqual(
@@ -175,7 +175,7 @@ test("model detail the normalized model drops is preserved", async () => {
   const { session, raw, model } = await sessionWith([
     rename("c1", "measure", "FactSales", "Cross Sales", "Unique Sales"),
   ]);
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
 
   const schema = JSON.parse(
     new TextDecoder("utf-16le").decode(unzipSync(result.bytes).DataModelSchema).replace(/^\uFEFF/, "")
@@ -192,7 +192,7 @@ test("expressions keep the string-or-array shape the file used", async () => {
   const { session, raw, model } = await sessionWith([
     rename("c1", "table", undefined, "FactSales", "Sales"),
   ]);
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   const schema = JSON.parse(
     new TextDecoder("utf-16le").decode(unzipSync(result.bytes).DataModelSchema).replace(/^\uFEFF/, "")
   );
@@ -209,7 +209,7 @@ test("renaming a table updates entity names but not report captions", async () =
   const { session, raw, model } = await sessionWith([
     rename("c1", "table", undefined, "FactSales", "Sales"),
   ]);
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   assert.equal(result.ok, true);
 
   const layoutText = new TextDecoder("utf-16le")
@@ -242,7 +242,7 @@ test("a DAX edit is written to the model and leaves the report alone", async () 
     },
   ]);
 
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   assert.equal(result.ok, true);
 
   const reopened = (await extract("x.pbit", result.bytes)).model;
@@ -264,7 +264,7 @@ test("a native query edit is written back under `query`", async () => {
     },
   ]);
 
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   assert.equal(result.ok, true);
 
   const reopened = (await extract("x.pbit", result.bytes)).model;
@@ -285,7 +285,7 @@ test("an export that would break a reference is refused, not offered", async () 
     },
   ]);
 
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   assert.equal(result.ok, false);
   assert.equal(result.bytes, undefined, "no file is handed back when verification fails");
   assert.ok(result.problems.some((p) => /broken reference/i.test(p)));
@@ -304,7 +304,7 @@ test("export is refused when the original archive was not retained", async () =>
 
 test("exporting with no changes is refused", async () => {
   const { raw, model } = await sessionWith([]);
-  const result = await exportUpdatedFile(raw, model, []);
+  const result = await exportUpdatedFile(raw, model, [], model);
   assert.equal(result.ok, false);
   assert.match(result.problems[0], /no changes/i);
 });
@@ -330,7 +330,7 @@ test("several changes at once all land in one exported file", async () => {
   ]);
 
   const { model: expected } = workingModel(session);
-  const result = await exportUpdatedFile(raw, model, session.changes);
+  const result = await exportUpdatedFile(raw, model, session.changes, workingModel(session).model);
   assert.deepEqual(result.problems, []);
 
   const reopened = (await extract("x.pbit", result.bytes)).model;

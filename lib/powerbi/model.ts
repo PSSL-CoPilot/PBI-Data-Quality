@@ -18,6 +18,13 @@ export type ObjectType =
   | "visual"
   | "partition";
 
+/** A KPI the model declares outright, as opposed to one inferred from a title. */
+export interface MeasureKpi {
+  targetExpression?: string;
+  statusExpression?: string;
+  statusGraphic?: string;
+}
+
 export interface Measure {
   name: string;
   table: string;
@@ -26,6 +33,13 @@ export interface Measure {
   description?: string;
   displayFolder?: string;
   isHidden: boolean;
+  /**
+   * Present when the model itself defines a KPI on this measure.
+   *
+   * This is a stated fact about the file, unlike the KPI names inferred from
+   * report captions, and must never be shown with the same hedging.
+   */
+  kpi?: MeasureKpi;
 }
 
 export interface Column {
@@ -41,6 +55,8 @@ export interface Column {
   isHidden: boolean;
   isKey: boolean;
   summarizeBy?: string;
+  /** The column this one is ordered by, which changes how a visual sorts. */
+  sortByColumn?: string;
   /** Only present when the source format reports it (PBIT rarely does). */
   cardinality?: number;
 }
@@ -49,14 +65,6 @@ export interface Column {
  * What the file actually says about the database query behind a table.
  * "folded" and "none" carry a reason rather than a fabricated statement.
  */
-export interface NativeQueryInfo {
-  kind: "native" | "folded" | "none";
-  /** Present only when kind is "native". */
-  sql?: string;
-  connector?: string;
-  reason?: string;
-}
-
 /**
  * What the file actually says about the database query behind a table.
  *
@@ -86,6 +94,24 @@ export interface Partition {
   nativeQuery?: NativeQueryInfo;
 }
 
+/** A field-list hierarchy. Its levels are columns, so those columns are in use. */
+export interface Hierarchy {
+  name: string;
+  levels: Array<{ name: string; column: string; ordinal: number }>;
+}
+
+/**
+ * A calculation group.
+ *
+ * These matter far more than their size suggests: a calculation item rewrites
+ * how every measure in the model evaluates, so a review that does not know one
+ * exists can be confidently wrong about what any measure returns.
+ */
+export interface CalculationGroup {
+  precedence?: number;
+  items: Array<{ name: string; expression: string }>;
+}
+
 export interface Table {
   name: string;
   kind: "table" | "calculated";
@@ -98,6 +124,11 @@ export interface Table {
   columns: Column[];
   measures: Measure[];
   partitions: Partition[];
+  hierarchies: Hierarchy[];
+  /** Present only on a calculation group table. */
+  calculationGroup?: CalculationGroup;
+  /** Incremental refresh, when the table declares a policy. */
+  refreshPolicy?: { policyType: string; detail: string };
 }
 
 export interface Relationship {
@@ -110,6 +141,10 @@ export interface Relationship {
   toCardinality: "one" | "many";
   crossFilteringBehavior: "oneDirection" | "bothDirections" | "automatic";
   isActive: boolean;
+  /** "both" lets row-level security travel across this relationship. */
+  securityFilteringBehavior?: string;
+  /** The engine skips its integrity check when the model promises it holds. */
+  relyOnReferentialIntegrity?: boolean;
 }
 
 /** A field binding found inside a visual, used for report-side dependencies. */
@@ -154,6 +189,13 @@ export interface SharedExpression {
   description?: string;
 }
 
+/** A row-level security role and the DAX filters it applies per table. */
+export interface SecurityRole {
+  name: string;
+  modelPermission?: string;
+  tableFilters: Array<{ table: string; filterExpression: string }>;
+}
+
 export interface Model {
   source: {
     fileName: string;
@@ -166,6 +208,13 @@ export interface Model {
   relationships: Relationship[];
   /** Model-level shared queries and parameters (Power Query "Other Queries"). */
   expressions: SharedExpression[];
+  /**
+   * Row-level security roles.
+   *
+   * Read so the app never implies a model is unsecured when it is not, and so
+   * a review can see that a table carries a filter every reader is subject to.
+   */
+  roles: SecurityRole[];
   pages: Page[];
   /** Non-fatal extraction notes. Surfaced in the UI, never swallowed. */
   warnings: string[];

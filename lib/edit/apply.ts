@@ -23,6 +23,21 @@ export interface EditTarget {
   name: string;
 }
 
+/**
+ * Why a change was made, when it was made by a plan rather than by hand.
+ *
+ * A consolidation produces a scatter of ordinary expression edits. Without a
+ * note saying what they were for, the export audit cannot tell a consolidation
+ * from someone editing DAX, and so cannot check that the merge actually took.
+ */
+export interface ChangeIntent {
+  kind: "consolidation";
+  /** The table the merge keeps. */
+  canonical: string;
+  /** Tables the merge redirects references away from. */
+  replaced: string[];
+}
+
 export interface Change {
   id: string;
   target: EditTarget;
@@ -30,6 +45,8 @@ export interface Change {
   before: string;
   after: string;
   at: number;
+  /** Set by a plan; absent on a hand edit. */
+  intent?: ChangeIntent;
 }
 
 export interface ApplyResult {

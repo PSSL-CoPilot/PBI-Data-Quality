@@ -10,13 +10,14 @@
  * The query is whatever the file actually holds — native SQL, Power Query, or a
  * calculated-table expression — and nothing is invented when a table has none.
  */
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 
 import type { Change } from "../lib/edit/session.ts";
 import type { Column, Model, Partition, Table } from "../lib/powerbi/model.ts";
 import { replaceNativeQuery } from "../lib/powerbi/nativequery.ts";
 import { analyseMeasureSources } from "../lib/powerbi/sources.ts";
 import { CodeEditor, type CodeLanguage } from "./CodeEditor.tsx";
+import { useDrawerPresence } from "./drawer.tsx";
 import { ColumnEditor, PartitionEditor, TableEditor } from "./Editor.tsx";
 
 export type Focus = { type: string; name: string; table?: string; page?: string } | null;
@@ -190,20 +191,6 @@ function PartitionSource({
   );
 }
 
-function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="groupCard" style={{ marginTop: 10 }}>
-      <button className="groupHead" onClick={() => setOpen((v) => !v)}>
-        <span className="caret">{open ? "▼" : "▶"}</span>
-        <b>{title}</b>
-        {count !== undefined && <em>{count}</em>}
-      </button>
-      {open && <div className="groupBody">{children}</div>}
-    </div>
-  );
-}
-
 export function Tables({
   model,
   focus,
@@ -213,7 +200,15 @@ export function Tables({
   focus: Focus;
   onApply: (changes: Change[]) => void;
 }) {
+  /*
+   * The box stays controlled by `query`, so a keystroke always shows
+   * immediately. Filtering reads the deferred copy instead, which React may
+   * render late and abandon when the next keystroke arrives — without it every
+   * character re-filtered the whole model and cost about 90ms, which is five
+   * dropped frames per letter.
+   */
   const [query, setQuery] = useState("");
+  const search = useDeferredValue(query);
   const [selected, setSelected] = useState<Table | null>(() =>
     focus?.type === "table" ? (model.tables.find((t) => t.name === focus.name) ?? null) : null
   );
@@ -221,7 +216,7 @@ export function Tables({
   const sources = useMemo(() => analyseMeasureSources(model), [model]);
 
   const filtered = model.tables.filter((table) =>
-    `${table.name} ${table.kind}`.toLowerCase().includes(query.trim().toLowerCase())
+    `${table.name} ${table.kind}`.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   return (
@@ -295,6 +290,18 @@ type EditTargetState =
   | { kind: "partition"; name: string }
   | null;
 
+type DrawerTab = "Overview" | "Columns" | "Measures" | "SQL";
+const DRAWER_TABS: DrawerTab[] = ["Overview", "Columns", "Measures", "SQL"];
+
+/**
+ * The table detail panel.
+ *
+ * Four tabs rather than one long accordion, and a fixed four-row frame: header,
+ * tabs, body, footer. Only the body scrolls. The previous version stacked
+ * collapsible sections inside a scrolling panel, so the title and the actions
+ * scrolled away with the content and a long SQL block pushed the buttons out of
+ * reach entirely.
+ */
 function TableDrawer({
   model,
   table,
@@ -306,6 +313,9 @@ function TableDrawer({
   close: () => void;
   onApply: (changes: Change[]) => void;
 }) {
+  // Tells the shell to make room, so the table beside this stays readable.
+  useDrawerPresence();
+  const [tab, setTab] = useState<DrawerTab>("Overview");
   const [editing, setEditing] = useState<EditTargetState>(null);
   const sources = useMemo(() => analyseMeasureSources(model), [model]);
 
@@ -325,6 +335,20 @@ function TableDrawer({
     (r) => r.fromTable === table.name || r.toTable === table.name
   );
 
+  const editor =
+    editing?.kind === "table" ? (
+      <TableEditor model={model} table={table} onApply={onApply} onCancel={() => setEditing(null)} />
+    ) : column ? (
+      <ColumnEditor model={model} column={column} onApply={onApply} onCancel={() => setEditing(null)} />
+    ) : partition ? (
+      <PartitionEditor
+        model={model}
+        partition={partition}
+        onApply={onApply}
+        onCancel={() => setEditing(null)}
+      />
+    ) : null;
+
   return (
     <div className="drawer">
       <div className="drawerHead">
@@ -332,127 +356,141 @@ function TableDrawer({
           <small>TABLE</small>
           <h2>{table.name}</h2>
         </div>
-        <button onClick={close}>×</button>
-      </div>
-
-      <div className="tabs">
-        <button className={editing === null ? "on" : ""} onClick={() => setEditing(null)}>
-          Overview
-        </button>
-        <button
-          className={editing?.kind === "table" ? "on" : ""}
-          onClick={() => setEditing({ kind: "table" })}
-        >
-          Edit table
+        <button onClick={close} aria-label="Close">
+          ×
         </button>
       </div>
 
-      {editing?.kind === "table" && (
-        <TableEditor model={model} table={table} onApply={onApply} onCancel={() => setEditing(null)} />
-      )}
-      {column && (
-        <ColumnEditor
-          model={model}
-          column={column}
-          onApply={onApply}
-          onCancel={() => setEditing(null)}
-        />
-      )}
-      {partition && (
-        <PartitionEditor
-          model={model}
-          partition={partition}
-          onApply={onApply}
-          onCancel={() => setEditing(null)}
-        />
-      )}
+      <div className="drawerTabs">
+        {DRAWER_TABS.map((name) => (
+          <button
+            key={name}
+            className={tab === name && !editor ? "on" : ""}
+            onClick={() => {
+              setEditing(null);
+              setTab(name);
+            }}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
 
-      {editing === null && (
-        <>
-          <Section title="Columns" count={table.columns.length}>
-            {table.columns.length === 0 ? (
-              <p className="emptyNote">This table exposes no columns.</p>
-            ) : (
-              table.columns.map((entry) => (
-                <div className="measureRow" key={entry.name}>
-                  <div className="measureTop">
-                    <b>◇ {entry.name}</b>
-                    <span className="srcTag">{entry.dataType}</span>
-                    {entry.kind === "calculated" && <span className="kpiTag low">calculated</span>}
-                    {entry.isHidden && <span className="srcTag">hidden</span>}
-                  </div>
-                  {entry.description && <div className="measureMeta">{entry.description}</div>}
-                  <div className="measureActions">
-                    <button onClick={() => setEditing({ kind: "column", name: entry.name })}>
-                      Edit column
-                    </button>
-                  </div>
+      <div className="drawerBody">
+        {editor ?? (
+          <>
+            {tab === "Overview" && (
+              <>
+                <div className="meta">
+                  <span>
+                    <small>KIND</small>
+                    {table.kind === "calculated" ? "Calculated table" : "Table"}
+                  </span>
+                  <span>
+                    <small>COLUMNS</small>
+                    {table.columns.length}
+                  </span>
+                  <span>
+                    <small>MEASURES USING IT</small>
+                    {usingThisTable.length}
+                  </span>
+                  <span>
+                    <small>SOURCE</small>
+                    {table.partitions.map((p) => partitionLabel(p)).join(", ") || "None"}
+                  </span>
+                  <span>
+                    <small>HIDDEN</small>
+                    {table.isHidden ? "Yes" : "No"}
+                  </span>
                 </div>
-              ))
-            )}
-          </Section>
 
-          <Section title="Measures using this table" count={usingThisTable.length}>
-            {usingThisTable.length === 0 ? (
-              <p className="emptyNote">
-                No measure references this table in its DAX.
-              </p>
-            ) : (
-              usingThisTable.map((entry) => (
-                <div className="measureRow" key={`${entry.homeTable}.${entry.measure}`}>
-                  <div className="measureTop">
-                    <b>ƒ {entry.measure}</b>
-                    {entry.primary === table.name && <span className="kpiTag">primary source</span>}
-                    <span className="srcTag">Home: {entry.homeTable}</span>
+                {table.description && <p className="drawerNote">{table.description}</p>}
+
+                <h3 className="drawerSection">Relationships</h3>
+                {relationships.length === 0 ? (
+                  <p className="emptyNote">
+                    This table has no relationships, so it cannot filter or be filtered.
+                  </p>
+                ) : (
+                  relationships.map((rel) => (
+                    <div className="measureRow" key={rel.name}>
+                      <div className="measureTop">
+                        <b>
+                          {rel.fromTable}[{rel.fromColumn}] → {rel.toTable}[{rel.toColumn}]
+                        </b>
+                        <span className="srcTag">
+                          {rel.fromCardinality} → {rel.toCardinality}
+                        </span>
+                        {!rel.isActive && <span className="kpiTag low">inactive</span>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </>
+            )}
+
+            {tab === "Columns" &&
+              (table.columns.length === 0 ? (
+                <p className="emptyNote">This table exposes no columns.</p>
+              ) : (
+                table.columns.map((entry) => (
+                  <div className="measureRow" key={entry.name}>
+                    <div className="measureTop">
+                      <b>{entry.name}</b>
+                      <span className="srcTag">{entry.dataType}</span>
+                      {entry.kind === "calculated" && <span className="kpiTag low">calculated</span>}
+                      {entry.isHidden && <span className="srcTag">hidden</span>}
+                    </div>
+                    {entry.description && <div className="measureMeta">{entry.description}</div>}
+                    <div className="measureActions">
+                      <button onClick={() => setEditing({ kind: "column", name: entry.name })}>
+                        Edit column
+                      </button>
+                    </div>
                   </div>
-                  <div className="measureMeta">{entry.reason}</div>
-                </div>
-              ))
-            )}
-          </Section>
+                ))
+              ))}
 
-          <Section title="Relationships" count={relationships.length}>
-            {relationships.length === 0 ? (
-              <p className="emptyNote">
-                This table has no relationships, so it cannot filter or be filtered.
-              </p>
-            ) : (
-              relationships.map((rel) => (
-                <div className="measureRow" key={rel.name}>
-                  <div className="measureTop">
-                    <b>
-                      {rel.fromTable}[{rel.fromColumn}] → {rel.toTable}[{rel.toColumn}]
-                    </b>
-                    <span className="srcTag">
-                      {rel.fromCardinality} → {rel.toCardinality}
-                    </span>
-                    <span className="srcTag">{rel.crossFilteringBehavior}</span>
-                    {!rel.isActive && <span className="kpiTag low">inactive</span>}
+            {tab === "Measures" &&
+              (usingThisTable.length === 0 ? (
+                <p className="emptyNote">No measure reads this table in its DAX.</p>
+              ) : (
+                usingThisTable.map((entry) => (
+                  <div className="measureRow" key={`${entry.homeTable}.${entry.measure}`}>
+                    <div className="measureTop">
+                      <b>{entry.measure}</b>
+                      {entry.primary === table.name && <span className="kpiTag">main source</span>}
+                      <span className="srcTag">stored in {entry.homeTable}</span>
+                    </div>
+                    <div className="measureMeta">{entry.reason}</div>
                   </div>
-                </div>
-              ))
-            )}
-          </Section>
+                ))
+              ))}
 
-          <Section title="Source SQL" count={table.partitions.length}>
-            {table.partitions.length === 0 ? (
-              <p className="emptyNote">This table exposes no partition or source definition.</p>
-            ) : (
-              table.partitions.map((entry) => (
-                <PartitionSource
-                  key={entry.name}
-                  partition={entry}
-                  onEdit={() => setEditing({ kind: "partition", name: entry.name })}
-                  onEditSql={(sql) => onApply([sqlChange(entry, sql)])}
-                />
-              ))
-            )}
-          </Section>
-        </>
-      )}
+            {tab === "SQL" &&
+              (table.partitions.length === 0 ? (
+                <p className="emptyNote">This table exposes no source definition.</p>
+              ) : (
+                table.partitions.map((entry) => (
+                  <PartitionSource
+                    key={entry.name}
+                    partition={entry}
+                    onEdit={() => setEditing({ kind: "partition", name: entry.name })}
+                    onEditSql={(sql) => onApply([sqlChange(entry, sql)])}
+                  />
+                ))
+              ))}
+          </>
+        )}
+      </div>
 
       <div className="drawerFoot">
-        <button onClick={close}>Done</button>
+        {!editor && tab !== "SQL" && (
+          <button onClick={() => setEditing({ kind: "table" })}>Edit table</button>
+        )}
+        <button className="primarySmall" onClick={close}>
+          Done
+        </button>
       </div>
     </div>
   );
