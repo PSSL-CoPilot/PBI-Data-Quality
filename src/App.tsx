@@ -48,6 +48,7 @@ import {
 } from "../lib/edit/session.ts";
 import { Changes } from "./Changes.tsx";
 import { DrawerHostProvider, useDrawerOpen } from "./drawer.tsx";
+import { Export } from "./Export.tsx";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { Measures } from "./Measures.tsx";
 import { Queries } from "./Queries.tsx";
@@ -64,6 +65,7 @@ type View =
   | "Quality"
   | "Optimize"
   | "Changes"
+  | "Export"
   | "Settings";
 
 /*
@@ -79,9 +81,10 @@ const NAV: View[] = [
   "Quality",
   "Optimize",
   "Changes",
+  "Export",
   "Settings",
 ];
-const ICONS = ["⌂", "ƒ", "▦", "⌗", "✓", "◎", "⎋", "⚙"];
+const ICONS = ["⌂", "ƒ", "▦", "⌗", "✓", "◎", "⎋", "⤓", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
 /*
@@ -531,6 +534,8 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
           onApply={props.onApply}
         />
       );
+    case "Export":
+      return <Export model={model} />;
     case "Settings":
       return <SettingsView model={model} raw={props.raw} />;
     default:
