@@ -98,14 +98,13 @@ export function Lineage({ model }: { model: Model }) {
         <h2>The report layout was read, but it contained no pages</h2>
         <p>
           A report part was found in this file and parsed successfully, yet it described zero
-          pages. That is what a report saved in a layout format this build does not recognise
-          looks like — most often the newer PBIR format, which stores each page as its own JSON
-          file under <code>Report/definition/pages/</code> rather than in a single{" "}
-          <code>Report/Layout</code> part.
+          pages. Both report layouts this build reads — the single{" "}
+          <code>Report/Layout</code> document and the PBIR folder under{" "}
+          <code>Report/definition/pages/</code> — were checked.
         </p>
         <p>
-          Settings shows exactly which parts were read from the file. If you can re-export the
-          report with the enhanced report format turned off, this screen will work on it.
+          Settings lists every part in the archive, which will show what this file actually
+          contains.
         </p>
         {model.warnings.length > 0 && (
           <ul className="notAssessed">

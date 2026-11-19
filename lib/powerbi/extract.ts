@@ -14,6 +14,7 @@ import type { Capability, CapabilityId, Model } from "./model.ts";
 import { available, unavailable } from "./model.ts";
 import { parseLayout } from "./layout.ts";
 import { parseTmsl, type TmslParts } from "./tmsl.ts";
+import { isPbirArchive, parsePbir, pbirParts } from "./pbir.ts";
 import { decodeUtf16, decodeUtf8, listZip, readZip, sha256, type ZipParts } from "./zip.ts";
 
 export type SourceFormat = Model["source"]["format"];
@@ -34,6 +35,8 @@ export interface RawSources {
    * indistinguishable from a corrupt one.
    */
   partNames: string[];
+  /** The PBIR page and visual documents read, when the report is in that format. */
+  pbirPaths?: string[];
   /**
    * The whole uploaded archive, retained only when the model is readable and
    * therefore exportable. Repacking needs every part, including the ones this
@@ -107,6 +110,8 @@ interface Detected {
   modelUnavailableReason?: string;
   /** Set when a report exists in the archive but this build cannot read it. */
   reportUnavailableReason?: string;
+  /** PBIR page and visual documents, when the report is in that format. */
+  pbirPaths?: string[];
 }
 
 /**
@@ -126,11 +131,16 @@ function findPart(names: string[], wanted: string): string | undefined {
 
 /** `Report/definition/pages/<page>/page.json` — the newer PBIR layout. */
 export function looksLikePbir(names: string[]): boolean {
-  return names.some((n) => /(^|\/)definition\/pages\//i.test(n));
+  return isPbirArchive(names);
 }
 
-const PBIR_REASON =
-  "This report is saved in the PBIR format, which stores every page as its own file under Report/definition/pages/ rather than in a single Report/Layout part. The pages are present in the file; this build does not read that layout yet. Re-export the report with the enhanced report format turned off, or save it as a .pbit from an earlier Power BI Desktop, to analyse it here.";
+/*
+ * Only reached when the archive is laid out as PBIR but holds no page
+ * documents to read — an empty report, or a definition folder carrying only
+ * bookmarks and themes.
+ */
+const PBIR_EMPTY_REASON =
+  "This report is saved in the PBIR format, but its Report/definition/pages/ folder contains no page documents to read.";
 
 export function detectFormat(names: string[]): Detected | undefined {
   const has = (name: string) => Boolean(findPart(names, name));
@@ -142,11 +152,7 @@ export function detectFormat(names: string[]): Detected | undefined {
       format: "pbit",
       modelSchemaPath: findPart(names, "DataModelSchema"),
       layoutPath: layout(),
-      reportUnavailableReason: layout()
-        ? undefined
-        : looksLikePbir(names)
-          ? PBIR_REASON
-          : undefined,
+      pbirPaths: layout() ? undefined : pbirParts(names),
     };
   }
 
@@ -164,8 +170,7 @@ export function detectFormat(names: string[]): Detected | undefined {
         !bim && tmdl
           ? "This PBIP project stores its model as TMDL text files. TMDL parsing is not implemented yet; re-save the project with the model.bim (TMSL) format, or upload a .pbit."
           : undefined,
-      reportUnavailableReason:
-        !pbipReport && looksLikePbir(names) ? PBIR_REASON : undefined,
+      pbirPaths: pbipReport ? undefined : pbirParts(names),
     };
   }
 
@@ -174,11 +179,7 @@ export function detectFormat(names: string[]): Detected | undefined {
       format: "pbix",
       layoutPath: layout(),
       modelUnavailableReason: PBIX_MODEL_REASON,
-      reportUnavailableReason: layout()
-        ? undefined
-        : looksLikePbir(names)
-          ? PBIR_REASON
-          : undefined,
+      pbirPaths: layout() ? undefined : pbirParts(names),
     };
   }
 
@@ -205,9 +206,11 @@ export async function extract(fileName: string, bytes: Uint8Array): Promise<Extr
     );
   }
 
-  const wanted = [detected.modelSchemaPath, detected.layoutPath].filter(
-    (n): n is string => Boolean(n)
-  );
+  const wanted = [
+    detected.modelSchemaPath,
+    detected.layoutPath,
+    ...(detected.pbirPaths ?? []),
+  ].filter((n): n is string => Boolean(n));
   const parts = wanted.length ? readZip(bytes, wanted) : {};
 
   const warnings: string[] = [];
@@ -252,6 +255,34 @@ export async function extract(fileName: string, bytes: Uint8Array): Promise<Extr
   let reportCapability: Capability = unavailable(
     detected.reportUnavailableReason ?? "This file contains no report layout part."
   );
+
+  /*
+   * PBIR first, because a file in that format has no Report/Layout to fall
+   * back to. The pages it produces are the same shape the legacy parser
+   * produces, so nothing downstream needs to know which branch ran.
+   */
+  const pbirPaths = detected.pbirPaths ?? [];
+  if (!detected.layoutPath && pbirPaths.length > 0) {
+    const documents = new Map<string, unknown>();
+    for (const path of pbirPaths) {
+      const part = parts[path];
+      if (!part) continue;
+      const decoded = decodePart(part);
+      if (decoded) documents.set(path, decoded.value);
+      else warnings.push(`The PBIR document ${path} could not be parsed as JSON.`);
+    }
+
+    const parsed = parsePbir({ documents });
+    warnings.push(...parsed.warnings);
+
+    if (parsed.pages.length > 0) {
+      pages = parsed.pages;
+      raw.pbirPaths = pbirPaths;
+      reportCapability = available();
+    } else {
+      reportCapability = unavailable(PBIR_EMPTY_REASON);
+    }
+  }
 
   const layoutPath = detected.layoutPath;
   if (layoutPath && parts[layoutPath]) {

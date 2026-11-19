@@ -1121,18 +1121,27 @@ function SettingsView({ model, raw }: { model: Model; raw: RawSources | null }) 
           </span>
         </div>
 
-        {raw && !raw.layoutPath && (
+        {/* Only when nothing was read. A PBIR report has no layoutPath either,
+            and warning about one that was read perfectly well would be noise. */}
+        {raw && !model.capabilities.report.available && (
           <div className="unavailable">
-            <b>No report layout part was found in this archive</b>
+            <b>No report layout was found in this archive</b>
+            <p>{model.capabilities.report.reason}</p>
             <p>
               The parts listed below are everything the file contains. This build reads report
-              pages from a single <code>Report/Layout</code> part, or from{" "}
-              <code>report.json</code> in a .pbip project. If the list shows paths under{" "}
-              <code>Report/definition/pages/</code> instead, the report was saved in the newer
-              PBIR format, where every page is its own file — the pages are there, this build
-              just does not read that shape yet.
+              pages from a single <code>Report/Layout</code> part, from{" "}
+              <code>report.json</code> in a .pbip project, or from the PBIR folder under{" "}
+              <code>Report/definition/pages/</code>.
             </p>
           </div>
+        )}
+
+        {raw?.pbirPaths && (
+          <p className="scoreNote">
+            This report is in the PBIR format, where every page and visual is its own file.{" "}
+            {raw.pbirPaths.length} page and visual documents were read from{" "}
+            <code>Report/definition/pages/</code>.
+          </p>
         )}
 
         {raw && raw.partNames.length > 0 && (

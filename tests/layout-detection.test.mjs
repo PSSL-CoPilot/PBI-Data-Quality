@@ -78,20 +78,13 @@ test("a PBIR archive is recognised as PBIR", () => {
   assert.equal(looksLikePbir(["Report/Layout", "DataModelSchema"]), false);
 });
 
-test("a PBIR report says so by name instead of claiming there is no report", async () => {
+test("a PBIR report is read, not merely named", async () => {
   const { model } = await extract("t.pbit", build(PBIR_FILES));
 
-  assert.equal(model.capabilities.report.available, false);
-  const reason = model.capabilities.report.reason;
-
-  assert.match(reason, /PBIR/, "the format is named");
-  assert.match(reason, /definition\/pages/, "where the pages actually live is stated");
-  assert.match(reason, /pages are present/i, "it does not claim the file has no pages");
-  assert.doesNotMatch(
-    reason,
-    /contains no report layout part/,
-    "the generic fallback must not be used when the cause is known"
-  );
+  assert.equal(model.capabilities.report.available, true, "PBIR must now be readable");
+  assert.equal(model.pages.length, 1);
+  assert.equal(model.pages[0].displayName, "Sales");
+  assert.equal(model.pages[0].visuals.length, 1);
 });
 
 test("the model is still read from a PBIR file, so only the report is lost", async () => {
@@ -118,4 +111,142 @@ test("a genuinely report-less archive still gets the generic reason", async () =
 test("detectFormat returns the real part name, not the one searched for", () => {
   const detected = detectFormat(["DataModelSchema", "Report/layout"]);
   assert.equal(detected.layoutPath, "Report/layout", "the archive's own spelling must be used");
+});
+
+/* ------------------------------------------------- PBIR read in full --- */
+
+/**
+ * The same report expressed both ways.
+ *
+ * PBIR changed the packaging, not the information, so the two must produce
+ * the same pages, the same visuals and the same bindings. Anything that
+ * disagrees here would make the rest of the app — KPI inference, lineage,
+ * usage — quietly depend on which format a file happened to be saved in.
+ */
+const LEGACY_EQUIV = {
+  id: 0,
+  sections: [
+    {
+      name: "p1",
+      displayName: "Sales Overview",
+      ordinal: 0,
+      width: 1280,
+      height: 720,
+      visualContainers: [
+        {
+          x: 40, y: 20, width: 200, height: 100,
+          config: JSON.stringify({
+            name: "v1",
+            singleVisual: {
+              visualType: "card",
+              prototypeQuery: {
+                Version: 2,
+                From: [{ Name: "o", Entity: "Orders", Type: 0 }],
+                Select: [{ Measure: { Expression: { SourceRef: { Source: "o" } }, Property: "Total Revenue" }, Name: "x" }],
+              },
+              vcObjects: { title: [{ properties: { text: { expr: { Literal: { Value: "'Revenue'" } } } } }] },
+            },
+          }),
+        },
+      ],
+    },
+  ],
+};
+
+const PBIR_EQUIV = {
+  Version: utf16("1.30", false),
+  DataModelSchema: utf16(SCHEMA),
+  "Report/definition/pages/pages.json": utf16({ pageOrder: ["p1"], activePageName: "p1" }),
+  "Report/definition/pages/p1/page.json": utf16({
+    name: "p1", displayName: "Sales Overview", width: 1280, height: 720,
+  }),
+  "Report/definition/pages/p1/visuals/v1/visual.json": utf16({
+    name: "v1",
+    position: { x: 40, y: 20, z: 0, width: 200, height: 100 },
+    visual: {
+      visualType: "card",
+      query: {
+        queryState: {
+          Values: {
+            projections: [
+              {
+                field: {
+                  Measure: {
+                    Expression: { SourceRef: { Entity: "Orders" } },
+                    Property: "Total Revenue",
+                  },
+                },
+                queryRef: "Orders.Total Revenue",
+              },
+            ],
+          },
+        },
+      },
+      visualContainerObjects: {
+        title: [{ properties: { text: { expr: { Literal: { Value: "'Revenue'" } } } } }],
+      },
+    },
+  }),
+};
+
+test("PBIR and the legacy layout describe the same report identically", async () => {
+  const legacy = await extract("legacy.pbit", build({
+    Version: utf16("1.30", false), DataModelSchema: utf16(SCHEMA), "Report/Layout": utf16(LEGACY_EQUIV),
+  }));
+  const pbir = await extract("pbir.pbit", build(PBIR_EQUIV));
+
+  const shape = (m) => m.pages.map((p) => ({
+    name: p.name, displayName: p.displayName, isHidden: p.isHidden,
+    width: p.width, height: p.height,
+    visuals: p.visuals.map((v) => ({
+      id: v.id, type: v.type, title: v.title,
+      x: v.x, y: v.y, width: v.width, height: v.height,
+      refs: v.refs.map((r) => `${r.kind}:${r.table ?? ""}[${r.field}]`).sort(),
+    })),
+  }));
+
+  assert.deepEqual(shape(pbir.model), shape(legacy.model));
+});
+
+test("a PBIR visual's measure binding resolves to its table", async () => {
+  const { model } = await extract("t.pbit", build(PBIR_EQUIV));
+  const refs = model.pages[0].visuals[0].refs;
+  assert.deepEqual(refs, [{ table: "Orders", field: "Total Revenue", kind: "measure" }]);
+});
+
+test("page order comes from pages.json, not directory order", async () => {
+  const files = {
+    Version: utf16("1.30", false),
+    DataModelSchema: utf16(SCHEMA),
+    "Report/definition/pages/pages.json": utf16({ pageOrder: ["zeta", "alpha"] }),
+    "Report/definition/pages/alpha/page.json": utf16({ name: "alpha", displayName: "Second" }),
+    "Report/definition/pages/zeta/page.json": utf16({ name: "zeta", displayName: "First" }),
+  };
+  const { model } = await extract("t.pbit", build(files));
+  assert.deepEqual(model.pages.map((p) => p.displayName), ["First", "Second"]);
+});
+
+test("a hidden PBIR page is recognised from its word-valued visibility", async () => {
+  const files = {
+    Version: utf16("1.30", false),
+    DataModelSchema: utf16(SCHEMA),
+    "Report/definition/pages/pages.json": utf16({ pageOrder: ["p1"] }),
+    "Report/definition/pages/p1/page.json": utf16({
+      name: "p1", displayName: "Hidden", visibility: "HiddenInViewMode",
+    }),
+  };
+  const { model } = await extract("t.pbit", build(files));
+  assert.equal(model.pages[0].isHidden, true);
+});
+
+test("a PBIR archive with a definition folder but no pages says so precisely", async () => {
+  const files = {
+    Version: utf16("1.30", false),
+    DataModelSchema: utf16(SCHEMA),
+    "Report/definition/pages/pages.json": utf16({ pageOrder: [] }),
+    "Report/definition/bookmarks/b1.json": utf16({ name: "b1" }),
+  };
+  const { model } = await extract("t.pbit", build(files));
+  assert.equal(model.capabilities.report.available, false);
+  assert.match(model.capabilities.report.reason, /no page documents/i);
 });
