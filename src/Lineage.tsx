@@ -71,15 +71,49 @@ export function Lineage({ model }: { model: Model }) {
   const node = (id: string) => layout.nodes.find((n) => n.id === id);
   const selectedNode = selected ? node(selected) : null;
 
-  if (!model.capabilities.report.available || model.pages.length === 0) {
+  /*
+   * These are two different failures and they used to share one message that
+   * asserted the first. "No report layout" is wrong, and misleading, when the
+   * layout was in fact found and read but produced no pages — which is what a
+   * report saved in a layout this build does not recognise looks like.
+   */
+  if (!model.capabilities.report.available) {
     return (
       <article className="card placeholder">
         <span>⤳</span>
-        <h2>Lineage needs the report layout</h2>
+        <h2>No report layout in this file</h2>
+        <p>{model.capabilities.report.reason}</p>
         <p>
-          KPIs are read from the visuals on each page. This file exposes no report layout, so
-          there are no KPIs to trace back.
+          KPIs are read from the visuals on each page, so without the layout there is nothing to
+          trace back.
         </p>
+      </article>
+    );
+  }
+
+  if (model.pages.length === 0) {
+    return (
+      <article className="card placeholder">
+        <span>⤳</span>
+        <h2>The report layout was read, but it contained no pages</h2>
+        <p>
+          A report part was found in this file and parsed successfully, yet it described zero
+          pages. That is what a report saved in a layout format this build does not recognise
+          looks like — most often the newer PBIR format, which stores each page as its own JSON
+          file under <code>Report/definition/pages/</code> rather than in a single{" "}
+          <code>Report/Layout</code> part.
+        </p>
+        <p>
+          Settings shows exactly which parts were read from the file. If you can re-export the
+          report with the enhanced report format turned off, this screen will work on it.
+        </p>
+        {model.warnings.length > 0 && (
+          <ul className="notAssessed">
+            {model.warnings.slice(0, 4).map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        )}
       </article>
     );
   }
