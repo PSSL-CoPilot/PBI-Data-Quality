@@ -60,7 +60,7 @@ export function Lineage({ model }: { model: Model }) {
   const [zoom, setZoom] = useState(1);
 
   const graph = useMemo(
-    () => buildLineage(model, { page: page || undefined, focusKpiName: focus || undefined }),
+    () => buildLineage(model, { page: page || undefined, focusKpi: focus || undefined }),
     [model, page, focus]
   );
   const layout = useMemo(() => layoutLineage(graph), [graph]);
@@ -173,17 +173,11 @@ export function Lineage({ model }: { model: Model }) {
               }}
             >
               <option value="">Every KPI on this page</option>
-              {[
-                ...new Set(
-                  kpis
-                    .filter((k) => k.pageName === page && k.kpiName)
-                    .map((k) => k.kpiName as string)
-                ),
-              ]
-                .sort((a, b) => a.localeCompare(b))
-                .map((name) => (
-                  <option key={name} value={name}>
-                    Only: {name}
+              {kpis
+                .filter((k) => k.pageName === page)
+                .map((k) => (
+                  <option key={k.id} value={k.id}>
+                    Only: {k.label}
                   </option>
                 ))}
             </select>
