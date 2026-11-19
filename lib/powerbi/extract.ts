@@ -26,6 +26,15 @@ export type SourceFormat = Model["source"]["format"];
 export interface RawSources {
   parts: ZipParts;
   /**
+   * Every entry in the uploaded archive, by name.
+   *
+   * Kept so the app can say what it actually saw in a file it could not read.
+   * Without it, "no report layout part" is a conclusion the reader has to take
+   * on trust and cannot check, and a file in an unexpected layout format is
+   * indistinguishable from a corrupt one.
+   */
+  partNames: string[];
+  /**
    * The whole uploaded archive, retained only when the model is readable and
    * therefore exportable. Repacking needs every part, including the ones this
    * build never parses, and a report-only PBIX cannot be exported anyway, so
@@ -96,17 +105,48 @@ interface Detected {
   layoutPath?: string;
   /** Set when a model exists in the archive but this build cannot read it. */
   modelUnavailableReason?: string;
+  /** Set when a report exists in the archive but this build cannot read it. */
+  reportUnavailableReason?: string;
 }
 
+/**
+ * Zip entry names are case-sensitive, and not every tool that writes a Power
+ * BI archive agrees on the casing or on whether paths carry a leading slash.
+ * Matching exactly made a file whose part is named `Report/layout`
+ * indistinguishable from one with no report at all, which is a confusing way
+ * to be wrong. The real name is returned so the rest of the pipeline reads
+ * the part by the name the archive actually uses.
+ */
+const canonical = (name: string) => name.replace(/^\/+/, "").toLowerCase();
+
+function findPart(names: string[], wanted: string): string | undefined {
+  const target = canonical(wanted);
+  return names.find((n) => canonical(n) === target);
+}
+
+/** `Report/definition/pages/<page>/page.json` — the newer PBIR layout. */
+export function looksLikePbir(names: string[]): boolean {
+  return names.some((n) => /(^|\/)definition\/pages\//i.test(n));
+}
+
+const PBIR_REASON =
+  "This report is saved in the PBIR format, which stores every page as its own file under Report/definition/pages/ rather than in a single Report/Layout part. The pages are present in the file; this build does not read that layout yet. Re-export the report with the enhanced report format turned off, or save it as a .pbit from an earlier Power BI Desktop, to analyse it here.";
+
 export function detectFormat(names: string[]): Detected | undefined {
-  const has = (name: string) => names.includes(name);
+  const has = (name: string) => Boolean(findPart(names, name));
   const find = (predicate: (n: string) => boolean) => names.find(predicate);
+  const layout = () => findPart(names, "Report/Layout");
 
   if (has("DataModelSchema")) {
     return {
       format: "pbit",
-      modelSchemaPath: "DataModelSchema",
-      layoutPath: has("Report/Layout") ? "Report/Layout" : undefined,
+      modelSchemaPath: findPart(names, "DataModelSchema"),
+      layoutPath: layout(),
+      reportUnavailableReason: layout()
+        ? undefined
+        : looksLikePbir(names)
+          ? PBIR_REASON
+          : undefined,
     };
   }
 
@@ -124,14 +164,21 @@ export function detectFormat(names: string[]): Detected | undefined {
         !bim && tmdl
           ? "This PBIP project stores its model as TMDL text files. TMDL parsing is not implemented yet; re-save the project with the model.bim (TMSL) format, or upload a .pbit."
           : undefined,
+      reportUnavailableReason:
+        !pbipReport && looksLikePbir(names) ? PBIR_REASON : undefined,
     };
   }
 
   if (has("DataModel")) {
     return {
       format: "pbix",
-      layoutPath: has("Report/Layout") ? "Report/Layout" : undefined,
+      layoutPath: layout(),
       modelUnavailableReason: PBIX_MODEL_REASON,
+      reportUnavailableReason: layout()
+        ? undefined
+        : looksLikePbir(names)
+          ? PBIR_REASON
+          : undefined,
     };
   }
 
@@ -166,6 +213,7 @@ export async function extract(fileName: string, bytes: Uint8Array): Promise<Extr
   const warnings: string[] = [];
   const raw: RawSources = {
     parts,
+    partNames: names,
     modelSchemaBom: false,
     modelSchemaEncoding: "utf-16le",
     layoutBom: false,
@@ -201,7 +249,9 @@ export async function extract(fileName: string, bytes: Uint8Array): Promise<Extr
   }
 
   let pages: Model["pages"] = [];
-  let reportCapability: Capability = unavailable("This file contains no report layout part.");
+  let reportCapability: Capability = unavailable(
+    detected.reportUnavailableReason ?? "This file contains no report layout part."
+  );
 
   const layoutPath = detected.layoutPath;
   if (layoutPath && parts[layoutPath]) {

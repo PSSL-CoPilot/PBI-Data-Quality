@@ -1091,6 +1091,67 @@ function SettingsView({ model, raw }: { model: Model; raw: RawSources | null }) 
 
   return (
     <>
+      {/*
+        Shown first, and shown always. When a file does not produce what the
+        reader expects, the only useful next question is what the archive
+        actually contained — and that is a fact the app has and used to throw
+        away, leaving "no report layout part" as something to take on trust.
+      */}
+      <article className="card checksWide">
+        <Head
+          over="ARCHIVE"
+          title={`${raw?.partNames.length ?? 0} parts in the uploaded file`}
+        />
+        <div className="meta">
+          <span>
+            <small>REPORT LAYOUT</small>
+            {raw?.layoutPath ?? "Not found"}
+          </span>
+          <span>
+            <small>MODEL SCHEMA</small>
+            {raw?.modelSchemaPath ?? "Not found"}
+          </span>
+          <span>
+            <small>PAGES READ</small>
+            {model.pages.length}
+          </span>
+          <span>
+            <small>VISUALS READ</small>
+            {model.pages.reduce((n, p) => n + p.visuals.length, 0)}
+          </span>
+        </div>
+
+        {raw && !raw.layoutPath && (
+          <div className="unavailable">
+            <b>No report layout part was found in this archive</b>
+            <p>
+              The parts listed below are everything the file contains. This build reads report
+              pages from a single <code>Report/Layout</code> part, or from{" "}
+              <code>report.json</code> in a .pbip project. If the list shows paths under{" "}
+              <code>Report/definition/pages/</code> instead, the report was saved in the newer
+              PBIR format, where every page is its own file — the pages are there, this build
+              just does not read that shape yet.
+            </p>
+          </div>
+        )}
+
+        {raw && raw.partNames.length > 0 && (
+          <Collapsible
+            summary={<span>Every part in the archive</span>}
+            count={raw.partNames.length}
+            defaultOpen={!raw.layoutPath}
+          >
+            {() => (
+              <ul className="notAssessed">
+                {raw.partNames.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            )}
+          </Collapsible>
+        )}
+      </article>
+
       <article className="card checksWide">
         <Head over="EXTRACTION" title="What was read from this file" />
         <p className="scoreNote">
