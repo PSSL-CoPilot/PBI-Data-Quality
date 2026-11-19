@@ -171,7 +171,9 @@ test("KPIs whose measures depend on each other are linked", () => {
   assert.match(related[0].reason, /calls/);
 });
 
-test("two KPIs showing the same measure are linked as moving together", () => {
+test("two visuals of one measure are one KPI, not two related ones", () => {
+  // They move together by definition -- that is what the KPI node says. A
+  // "related" arc between them would just restate it.
   const base = model();
   const graph = buildLineage({
     ...base,
@@ -186,9 +188,17 @@ test("two KPIs showing the same measure are linked as moving together", () => {
     }],
   });
 
+  assert.equal(graph.nodes.filter((n) => n.kind === "kpi").length, 1);
+  assert.equal(graph.nodes.filter((n) => n.kind === "visual").length, 2);
+  assert.deepEqual(graph.edges.filter((e) => e.kind === "related"), []);
+});
+
+test("one KPI shown many times produces no arcs among its own visuals", () => {
+  const graph = buildLineage(multiVisualModel());
   const related = graph.edges.filter((e) => e.kind === "related");
-  assert.equal(related.length, 1);
-  assert.match(related[0].reason, /Both display/);
+  for (const e of related) {
+    assert.ok(e.from.startsWith("kpi:") && e.to.startsWith("kpi:"), `visual-level arc: ${e.from}`);
+  }
 });
 
 test("unrelated KPIs are not linked", () => {
@@ -226,19 +236,19 @@ test("every edge carries a reason, so no arrow is unexplained", () => {
 
 test("same-column arcs are not clipped by the canvas width", async () => {
   const { layoutLineage } = await import("../lib/lineage/layout.ts");
-  // Two KPIs showing the same measure produce a related arc that bows out to
-  // the right of the last column. The canvas must be wide enough to show it;
-  // before this it was sized from the columns alone and cut the arc off.
+  // A KPI-to-KPI arc bows out to the right of the last column. The canvas
+  // must be wide enough to show it; before this it was sized from the
+  // columns alone and cut the arc off.
   const base = model();
   const graph = buildLineage({
     ...base,
     pages: [{
       ...base.pages[0],
       visuals: [
-        { id: "a", page: "p1", type: "card", title: "A", x: 0, y: 0, width: 1, height: 1,
-          refs: [{ table: "Measures", field: "Total Revenue", kind: "measure" }] },
-        { id: "b", page: "p1", type: "card", title: "B", x: 0, y: 0, width: 1, height: 1,
-          refs: [{ table: "Measures", field: "Total Revenue", kind: "measure" }] },
+        { id: "a", page: "p1", type: "card", title: "Unique Sales", x: 0, y: 0, width: 1, height: 1,
+          refs: [{ table: "Measures", field: "Unique Sales", kind: "measure" }] },
+        { id: "b", page: "p1", type: "card", title: "Order Count", x: 0, y: 0, width: 1, height: 1,
+          refs: [{ table: "Measures", field: "Order Count", kind: "measure" }] },
       ],
     }],
   });

@@ -384,60 +384,66 @@ export function buildLineage(model: Model, options: LineageOptions = {}): Lineag
   /* --- KPI -> KPI -------------------------------------------------------- */
 
   /*
-   * Two KPIs are related when the measure behind one depends on the measure
-   * behind the other, or when they display the same measure. Only a direct
-   * dependency counts: following the chain transitively would relate every
-   * KPI to every other one through a single shared base measure, which is
-   * true and useless.
+   * Between KPI *names*, not between visuals.
+   *
+   * Once a KPI is one node covering every visual that reports it, pairing
+   * visuals produces nonsense: three views of churn would be linked to each
+   * other for sharing a measure, which is just the KPI node restated, and a
+   * genuine link to another KPI would be drawn once per visual pair rather
+   * than once.
+   *
+   * Only a direct dependency counts. Following the chain transitively relates
+   * every KPI to every other one through a single shared base measure, which
+   * is true and useless.
    */
-  const directOf = new Map<string, Set<string>>();
-  for (const kpi of kpis) directOf.set(kpi.id, new Set(kpi.measureIds));
+  const kpiMeasures = new Map<string, Set<string>>();
+  for (const kpi of kpis) {
+    const name = kpiNameOf(kpi);
+    if (!name) continue;
+    const id = kpiNameKey(name);
+    const set = kpiMeasures.get(id) ?? new Set<string>();
+    for (const m of kpi.measureIds) set.add(m);
+    kpiMeasures.set(id, set);
+  }
 
-  for (const a of kpis) {
-    for (const b of kpis) {
-      if (a.id >= b.id) continue;
+  const kpiIds = [...kpiMeasures.keys()].sort();
 
-      const shared = a.measureIds.filter((m) => directOf.get(b.id)!.has(m));
-      if (shared.length > 0) {
-        const name = measures.get(shared[0])?.name ?? "a measure";
+  for (let i = 0; i < kpiIds.length; i++) {
+    for (let j = i + 1; j < kpiIds.length; j++) {
+      const a = kpiIds[i];
+      const b = kpiIds[j];
+      const aMeasures = kpiMeasures.get(a)!;
+      const bMeasures = kpiMeasures.get(b)!;
+
+      const shared = [...aMeasures].find((m) => bMeasures.has(m));
+      if (shared) {
         addEdge({
-          from: a.id,
-          to: b.id,
+          from: a,
+          to: b,
           kind: "related",
-          reason: `Both display [${name}], so they move together.`,
+          reason: `Both are built on [${measures.get(shared)?.name ?? "a measure"}], so they move together.`,
         });
         continue;
       }
 
-      // Does one side's measure call the other's?
-      let link: string | undefined;
-      for (const am of a.measureIds) {
-        const expression = measures.get(am)?.expression ?? "";
-        for (const called of callsOf(expression, byName)) {
-          if (directOf.get(b.id)!.has(called)) {
-            link = `${measures.get(am)?.name} calls [${measures.get(called)?.name}]`;
-            break;
-          }
-        }
-        if (link) break;
-      }
-      if (!link) {
-        for (const bm of b.measureIds) {
-          const expression = measures.get(bm)?.expression ?? "";
+      const calls = (from: Set<string>, to: Set<string>) => {
+        for (const id of from) {
+          const expression = measures.get(id)?.expression ?? "";
           for (const called of callsOf(expression, byName)) {
-            if (directOf.get(a.id)!.has(called)) {
-              link = `${measures.get(bm)?.name} calls [${measures.get(called)?.name}]`;
-              break;
+            if (to.has(called)) {
+              return `${measures.get(id)?.name} calls [${measures.get(called)?.name}]`;
             }
           }
-          if (link) break;
         }
-      }
+        return undefined;
+      };
+
+      const link = calls(aMeasures, bMeasures) ?? calls(bMeasures, aMeasures);
 
       if (link) {
         addEdge({
-          from: a.id,
-          to: b.id,
+          from: a,
+          to: b,
           kind: "related",
           reason: `${link}, so changing one changes the other.`,
         });
