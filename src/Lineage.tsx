@@ -28,6 +28,7 @@ const KIND_CLASS: Record<NodeKind, string> = {
   source: "lnSource",
   table: "lnTable",
   measure: "lnMeasure",
+  visual: "lnVisual",
   kpi: "lnKpi",
 };
 
@@ -36,6 +37,7 @@ const EDGE_LABEL: Record<EdgeKind, string> = {
   feeds: "feeds",
   calls: "calls",
   displays: "displays",
+  reports: "reports",
   related: "moves with",
 };
 
@@ -58,7 +60,7 @@ export function Lineage({ model }: { model: Model }) {
   const [zoom, setZoom] = useState(1);
 
   const graph = useMemo(
-    () => buildLineage(model, { page: page || undefined, focusKpi: focus || undefined }),
+    () => buildLineage(model, { page: page || undefined, focusKpiName: focus || undefined }),
     [model, page, focus]
   );
   const layout = useMemo(() => layoutLineage(graph), [graph]);
@@ -135,6 +137,7 @@ export function Lineage({ model }: { model: Model }) {
     source: layout.nodes.filter((n) => n.kind === "source").length,
     table: layout.nodes.filter((n) => n.kind === "table").length,
     measure: layout.nodes.filter((n) => n.kind === "measure").length,
+    visual: layout.nodes.filter((n) => n.kind === "visual").length,
     kpi: layout.nodes.filter((n) => n.kind === "kpi").length,
   };
   const related = graph.edges.filter((e) => e.kind === "related").length;
@@ -170,11 +173,17 @@ export function Lineage({ model }: { model: Model }) {
               }}
             >
               <option value="">Every KPI on this page</option>
-              {kpis
-                .filter((k) => k.pageName === page)
-                .map((k) => (
-                  <option key={k.id} value={k.id}>
-                    Only: {k.label}
+              {[
+                ...new Set(
+                  kpis
+                    .filter((k) => k.pageName === page && k.kpiName)
+                    .map((k) => k.kpiName as string)
+                ),
+              ]
+                .sort((a, b) => a.localeCompare(b))
+                .map((name) => (
+                  <option key={name} value={name}>
+                    Only: {name}
                   </option>
                 ))}
             </select>
@@ -186,7 +195,7 @@ export function Lineage({ model }: { model: Model }) {
         </div>
 
         <div className="lnLegend">
-          {(["source", "table", "measure", "kpi"] as NodeKind[]).map((k) => (
+          {(["source", "table", "measure", "visual", "kpi"] as NodeKind[]).map((k) => (
             <span key={k} className={`lnChip ${KIND_CLASS[k]}`}>
               {LAYER_LABEL[k]} <em>{counts[k]}</em>
             </span>

@@ -28,7 +28,14 @@ import { allMeasures } from "../powerbi/model.ts";
 import { analyseMeasureSources, type MeasureSources } from "../powerbi/sources.ts";
 import { readSqlFacts } from "../export/definitions.ts";
 
-export type NodeKind = "source" | "table" | "measure" | "kpi";
+/*
+ * `visual` is the thing on the page; `kpi` is the name that thing reports.
+ * They were one node until it became clear that a single KPI is usually shown
+ * several times over — a card, a monthly view, a daily view — and collapsing
+ * those into one box per visual hid the fact that they are all the same
+ * number.
+ */
+export type NodeKind = "source" | "table" | "measure" | "visual" | "kpi";
 
 export interface LineageNode {
   id: string;
@@ -43,7 +50,7 @@ export interface LineageNode {
   detail?: string;
 }
 
-export type EdgeKind = "loads" | "feeds" | "calls" | "displays" | "related";
+export type EdgeKind = "loads" | "feeds" | "calls" | "displays" | "reports" | "related";
 
 export interface LineageEdge {
   from: string;
@@ -93,7 +100,8 @@ export function isKpiVisual(visual: Visual): boolean {
 const measureKey = (table: string, name: string) => `measure:${table}[${name}]`;
 const tableKey = (name: string) => `table:${name}`;
 const sourceKey = (object: string) => `source:${object}`;
-const kpiKey = (visual: Visual) => `kpi:${visual.page}/${visual.id}`;
+const visualKey = (visual: Visual) => `visual:${visual.page}/${visual.id}`;
+const kpiNameKey = (name: string) => `kpi:${name.toLowerCase()}`;
 
 /**
  * Every bracketed reference in an expression that names a known measure.
@@ -115,8 +123,10 @@ function callsOf(expression: string, known: Map<string, string>): string[] {
 export interface LineageOptions {
   /** Restrict to KPIs on this page; omit for every page. */
   page?: string;
-  /** Restrict to one KPI and whatever it depends on. */
+  /** Restrict to one visual and whatever it depends on. */
   focusKpi?: string;
+  /** Restrict to one KPI name, keeping every visual that reports it. */
+  focusKpiName?: string;
 }
 
 /**
@@ -175,7 +185,7 @@ export function buildLineage(model: Model, options: LineageOptions = {}): Lineag
     for (const visual of page.visuals) {
       if (!isKpiVisual(visual)) continue;
 
-      const id = kpiKey(visual);
+      const id = visualKey(visual);
       if (options.focusKpi && id !== options.focusKpi) continue;
 
       const measureIds: string[] = [];
@@ -194,6 +204,27 @@ export function buildLineage(model: Model, options: LineageOptions = {}): Lineag
     }
   }
 
+  /*
+   * The KPI a visual reports is taken from the measure it displays, not from
+   * its own title. Titles are where the variants live — "Churn %", "Churn %
+   * monthly", "Churn % by region" — so grouping on them would either split
+   * one KPI into several or need fuzzy matching, which is a guess. The
+   * measure is the same object in every one of those visuals, so it groups
+   * them exactly.
+   */
+  const kpiNameOf = (entry: KpiEntry): string | undefined => {
+    const first = entry.measureIds.map((id) => measures.get(id)).find(Boolean);
+    if (!first) return undefined;
+    return bestKpiName(kpiNames, first.table, first.name)?.label ?? first.name;
+  };
+
+  if (options.focusKpiName) {
+    const wanted = options.focusKpiName.toLowerCase();
+    const keep = kpis.filter((k) => kpiNameOf(k)?.toLowerCase() === wanted);
+    kpis.length = 0;
+    kpis.push(...keep);
+  }
+
   for (const kpi of kpis) {
     const inferredName = kpi.measureIds
       .map((id) => measures.get(id))
@@ -205,7 +236,7 @@ export function buildLineage(model: Model, options: LineageOptions = {}): Lineag
 
     addNode({
       id: kpi.id,
-      kind: "kpi",
+      kind: "visual",
       label,
       sublabel: kpi.visual.type,
       page: kpi.pageDisplay,
@@ -215,6 +246,32 @@ export function buildLineage(model: Model, options: LineageOptions = {}): Lineag
         : inferredName
           ? `No title on the visual. "${inferredName}" was read from a nearby caption on ${kpi.pageDisplay}, so it is a guess.`
           : `This ${kpi.visual.type} on ${kpi.pageDisplay} has no title and no caption near it.`,
+    });
+
+    // The KPI this visual reports, shared with every other visual on it.
+    const name = kpiNameOf(kpi);
+    if (!name) continue;
+
+    const id = kpiNameKey(name);
+    const shown = kpis.filter((k) => kpiNameOf(k) === name);
+    addNode({
+      id,
+      kind: "kpi",
+      label: name,
+      sublabel:
+        shown.length === 1 ? "1 visual" : `${shown.length} visuals`,
+      detail:
+        shown.length === 1
+          ? `Reported by one visual on ${kpi.pageDisplay}.`
+          : `Reported by ${shown.length} visuals: ${shown
+              .map((k) => k.visual.title ?? k.visual.type)
+              .join(", ")}. They all show the same number.`,
+    });
+    addEdge({
+      from: kpi.id,
+      to: id,
+      kind: "reports",
+      reason: `This visual reports ${name}.`,
     });
   }
 
@@ -401,6 +458,8 @@ export function listKpis(model: Model): Array<{
   pageName: string;
   visualType: string;
   measureCount: number;
+  /** The KPI this visual reports, shared by every visual showing it. */
+  kpiName?: string;
 }> {
   const kpiNames = inferKpiNames(model);
   const out: ReturnType<typeof listKpis> = [];
@@ -414,12 +473,18 @@ export function listKpis(model: Model): Array<{
         .find(Boolean);
 
       out.push({
-        id: kpiKey(visual),
+        id: visualKey(visual),
         label: visual.title ?? inferred ?? `Untitled ${visual.type}`,
         page: page.displayName,
         pageName: page.name,
         visualType: visual.type,
         measureCount: visual.refs.filter((r) => r.kind === "measure").length,
+        // Same rule the graph uses: the measure names the KPI, not the title.
+        kpiName: (() => {
+          const first = visual.refs.find((r) => r.kind === "measure");
+          if (!first) return undefined;
+          return bestKpiName(kpiNames, first.table ?? "", first.field)?.label ?? first.field;
+        })(),
       });
     }
   }
@@ -456,11 +521,12 @@ export function excludedFromPage(
 }
 
 /** Group nodes into the four lineage columns, left to right. */
-export const LAYERS: NodeKind[] = ["source", "table", "measure", "kpi"];
+export const LAYERS: NodeKind[] = ["source", "table", "measure", "visual", "kpi"];
 
 export const LAYER_LABEL: Record<NodeKind, string> = {
   source: "Source object",
   table: "PBI table",
   measure: "Measure",
+  visual: "Visual",
   kpi: "KPI",
 };

@@ -126,8 +126,12 @@ test("arrows run in the direction the data moves", () => {
   assert.ok(feeds.to.startsWith("measure:"));
 
   const displays = kind("displays")[0];
-  assert.ok(displays.from.startsWith("measure:"), "measure feeds the KPI");
-  assert.ok(displays.to.startsWith("kpi:"));
+  assert.ok(displays.from.startsWith("measure:"), "measure feeds the visual");
+  assert.ok(displays.to.startsWith("visual:"));
+
+  const reports = kind("reports")[0];
+  assert.ok(reports.from.startsWith("visual:"), "the visual reports the KPI");
+  assert.ok(reports.to.startsWith("kpi:"));
 });
 
 test("a measure that calls another pulls it into the graph, callee feeding caller", () => {
@@ -196,9 +200,7 @@ test("unrelated KPIs are not linked", () => {
 /* ------------------------------------------------------------- scoping --- */
 
 test("focusing one KPI keeps only its own lineage", () => {
-  const all = g();
-  const target = all.nodes.find((n) => n.kind === "kpi" && n.label === "Total Revenue");
-  const focused = buildLineage(model(), { focusKpi: target.id });
+  const focused = buildLineage(model(), { focusKpiName: "Total Revenue" });
 
   assert.deepEqual(ids(focused, "kpi"), ["Total Revenue"]);
   assert.deepEqual(ids(focused, "measure"), ["Total Revenue"], "only the measure it displays");
@@ -260,4 +262,107 @@ test("every node sits inside the canvas bounds", async () => {
     assert.ok(n.x >= 0 && n.x + NODE_W <= L.width, `${n.label} escapes horizontally`);
     assert.ok(n.y >= 0 && n.y + NODE_H <= L.height, `${n.label} escapes vertically`);
   }
+});
+
+/* ----------------------------------------------- the KPI name layer --- */
+
+/**
+ * One KPI shown several ways.
+ *
+ * A card, a monthly view and a daily view all bound to the same measure are
+ * three visuals reporting one number, and the diagram has to say so. The
+ * grouping is on the measure, not the title, because the titles are exactly
+ * where the variants live.
+ */
+function multiVisualModel() {
+  const base = model();
+  const card = (id, title) => ({
+    id, page: "p1", type: "card", title, x: 0, y: 0, width: 1, height: 1,
+    refs: [{ table: "Measures", field: "Total Revenue", kind: "measure" }],
+  });
+  return {
+    ...base,
+    pages: [{
+      ...base.pages[0],
+      visuals: [
+        card("v1", "Revenue"),
+        card("v2", "Revenue monthly"),
+        card("v3", "Revenue daily"),
+        { id: "v4", page: "p1", type: "card", title: "Unique Sales", x: 0, y: 0, width: 1, height: 1,
+          refs: [{ table: "Measures", field: "Unique Sales", kind: "measure" }] },
+      ],
+    }],
+  };
+}
+
+test("every visual showing one measure collapses to a single KPI node", () => {
+  const graph = buildLineage(multiVisualModel());
+  const kpiNames = graph.nodes.filter((n) => n.kind === "kpi").map((n) => n.label).sort();
+  const visuals = graph.nodes.filter((n) => n.kind === "visual").map((n) => n.label).sort();
+
+  assert.equal(kpiNames.length, 2, `expected 2 KPI names, got ${kpiNames}`);
+  assert.deepEqual(visuals, ["Revenue", "Revenue daily", "Revenue monthly", "Unique Sales"]);
+});
+
+test("each visual reports its KPI, and the KPI says how many show it", () => {
+  const graph = buildLineage(multiVisualModel());
+  const reports = graph.edges.filter((e) => e.kind === "reports");
+  assert.equal(reports.length, 4, "one edge per visual");
+
+  for (const e of reports) {
+    assert.ok(e.from.startsWith("visual:"), "the visual is the source");
+    assert.ok(e.to.startsWith("kpi:"), "the KPI name is the target");
+  }
+
+  const revenue = graph.nodes.find((n) => n.kind === "kpi" && /revenue/i.test(n.label));
+  assert.match(revenue.sublabel, /3 visuals/);
+  assert.match(revenue.detail, /Revenue monthly/);
+});
+
+test("the layers run source, table, measure, visual, KPI", () => {
+  const graph = buildLineage(multiVisualModel());
+  const order = ["source", "table", "measure", "visual", "kpi"];
+  for (const kind of order) {
+    assert.ok(graph.nodes.some((n) => n.kind === kind), `no ${kind} node`);
+  }
+  // The chain must be continuous: a visual is fed by a measure and feeds a KPI.
+  const visual = graph.nodes.find((n) => n.kind === "visual");
+  assert.ok(graph.edges.some((e) => e.to === visual.id && e.kind === "displays"));
+  assert.ok(graph.edges.some((e) => e.from === visual.id && e.kind === "reports"));
+});
+
+test("focusing a KPI name keeps every visual that reports it", () => {
+  // "Revenue" is the business name inferred for the measure; the three
+  // titles are variants of it, which is exactly why they must group.
+  const graph = buildLineage(multiVisualModel(), { focusKpiName: "Revenue" });
+  const visuals = graph.nodes.filter((n) => n.kind === "visual").map((n) => n.label).sort();
+
+  assert.deepEqual(visuals, ["Revenue", "Revenue daily", "Revenue monthly"]);
+  assert.equal(
+    graph.nodes.filter((n) => n.kind === "kpi").length,
+    1,
+    "only the focused KPI remains"
+  );
+  assert.equal(
+    graph.nodes.some((n) => n.label === "Unique Sales"),
+    false,
+    "the other KPI and its visual are gone"
+  );
+});
+
+test("the KPI name comes from the measure, so differing titles still group", () => {
+  // "Revenue", "Revenue monthly" and "Revenue daily" are three different
+  // titles; grouping on them would split one KPI into three.
+  const graph = buildLineage(multiVisualModel());
+  const kpi = graph.nodes.find((n) => n.kind === "kpi" && /revenue/i.test(n.label));
+  const reportingIt = graph.edges.filter((e) => e.kind === "reports" && e.to === kpi.id);
+  assert.equal(reportingIt.length, 3);
+});
+
+test("listKpis reports the KPI name alongside the visual label", () => {
+  const rows = listKpis(multiVisualModel());
+  const names = [...new Set(rows.map((r) => r.kpiName))].sort();
+  assert.deepEqual(names, ["Revenue", "Unique Sales"]);
+  // Every variant title maps to the one KPI name.
+  assert.equal(rows.filter((r) => r.kpiName === "Revenue").length, 3);
 });

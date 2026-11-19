@@ -3926,6 +3926,7 @@ button {
 .lnSource rect  { stroke: #7c6ba8; fill: color-mix(in srgb, #7c6ba8 9%, var(--surface)); }
 .lnTable rect   { stroke: #3d7ea6; fill: color-mix(in srgb, #3d7ea6 9%, var(--surface)); }
 .lnMeasure rect { stroke: var(--accent); fill: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.lnVisual rect  { stroke: #8a8f5c; fill: color-mix(in srgb, #8a8f5c 10%, var(--surface)); }
 .lnKpi rect     { stroke: #c07a2c; fill: color-mix(in srgb, #c07a2c 12%, var(--surface)); }
 
 /* --- edges --------------------------------------------------------------- */
@@ -3990,6 +3991,7 @@ button {
 .lnChip.lnSource  { border-color: #7c6ba8; }
 .lnChip.lnTable   { border-color: #3d7ea6; }
 .lnChip.lnMeasure { border-color: var(--accent); }
+.lnChip.lnVisual  { border-color: #8a8f5c; }
 .lnChip.lnKpi     { border-color: #c07a2c; }
 .lnChip.lnRelated { border-color: #c07a2c; border-style: dashed; }
 
