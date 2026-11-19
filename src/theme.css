@@ -47,6 +47,14 @@
   --info: #3f7fa8;
   --info-soft: #ecf4f9;
 
+  /* Severity ramp, mapped onto the palette above rather than invented.
+     These were previously only var() fallbacks with hard-coded light-mode
+     hex, so every severity colour ignored the dark theme entirely. */
+  --sev-critical: var(--danger);
+  --sev-high: var(--warn);
+  --sev-medium: #8a6d1b;
+  --sev-low: var(--text-3);
+
   /* Shape — nearly square. The reference has no rounded language at all. */
   --r-xs: 2px;
   --r-sm: 3px;
@@ -104,6 +112,11 @@
   --danger-soft: #2e1b1b;
   --info: #6aa9d0;
   --info-soft: #16262f;
+
+  --sev-critical: var(--danger);
+  --sev-high: var(--warn);
+  --sev-medium: #cbb264;
+  --sev-low: var(--text-3);
 
   --shadow-sm: none;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%);
@@ -3117,7 +3130,7 @@ button {
 .bizName {
   font-size: 13px;
   font-weight: 650;
-  color: var(--text-1);
+  color: var(--text);
 }
 
 /* A low-confidence guess is still shown, but it does not read as settled. */
@@ -3127,7 +3140,7 @@ button {
 }
 
 .techName {
-  font-family: var(--mono);
+  font-family: var(--mono-font);
   font-size: 11px;
   color: var(--text-3);
   background: var(--surface-2);
@@ -3148,7 +3161,7 @@ button {
   border: 1px solid var(--border-strong, var(--border));
   background: var(--surface-2);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--mono-font);
   font-size: 9px;
   font-weight: 700;
   line-height: 1;
@@ -3202,15 +3215,15 @@ button {
   color: var(--text-3);
 }
 
-.issueHeading.critical { color: var(--sev-critical, #d3383f); }
-.issueHeading.high { color: var(--sev-high, #d9822b); }
-.issueHeading.medium { color: var(--sev-medium, #b58b00); }
+.issueHeading.critical { color: var(--sev-critical); }
+.issueHeading.high { color: var(--sev-high); }
+.issueHeading.medium { color: var(--sev-medium); }
 .issueHeading.low { color: var(--text-3); }
 
 .issue {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   padding: 16px 18px;
   margin-bottom: 10px;
 }
@@ -3233,7 +3246,7 @@ button {
   margin: 0;
   font-size: 14px;
   font-weight: 650;
-  color: var(--text-1);
+  color: var(--text);
 }
 
 .issueState {
@@ -3307,7 +3320,7 @@ button {
 /* Pushed to the far end: it answers "which check", asked only after the fact. */
 .issueRule {
   margin-left: auto;
-  font-family: var(--mono);
+  font-family: var(--mono-font);
   font-size: 10px;
   color: var(--text-3);
 }
@@ -3326,7 +3339,7 @@ button {
 }
 
 .disclosure:hover {
-  color: var(--text-1);
+  color: var(--text);
 }
 
 .disclosureBody {
@@ -3368,7 +3381,7 @@ button {
 
 .optTabs button:hover {
   background: var(--surface-2);
-  color: var(--text-1);
+  color: var(--text);
 }
 
 .optTabs button.on {
@@ -3418,7 +3431,7 @@ button {
   margin: 0;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   overflow: hidden;
 }
 
@@ -3448,7 +3461,7 @@ button {
   display: block;
   font-size: 12px;
   font-weight: 650;
-  color: var(--text-1);
+  color: var(--text);
 }
 
 .auditList li p {
@@ -3467,11 +3480,11 @@ button {
 }
 
 .auditFail > span {
-  color: var(--sev-critical, #d3383f);
+  color: var(--sev-critical);
 }
 
 .auditFail b {
-  color: var(--sev-critical, #d3383f);
+  color: var(--sev-critical);
 }
 
 /* =============================================================================
@@ -3492,7 +3505,7 @@ button {
 
 .collapsible {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: var(--surface);
   margin-bottom: 8px;
   overflow: hidden;
@@ -3511,7 +3524,7 @@ button {
   border: 0;
   background: transparent;
   text-align: left;
-  color: var(--text-1);
+  color: var(--text);
   transition: background var(--fast) var(--ease);
 }
 
@@ -3601,13 +3614,13 @@ button {
   line-height: 1.6;
 }
 
-.sqlFindings li.high { border-left-color: var(--sev-critical, #d3383f); }
-.sqlFindings li.medium { border-left-color: var(--sev-high, #d9822b); }
+.sqlFindings li.high { border-left-color: var(--sev-critical); }
+.sqlFindings li.medium { border-left-color: var(--sev-high); }
 .sqlFindings li.low { border-left-color: var(--text-3); }
 
 .sqlFindings li b {
   display: block;
-  color: var(--text-1);
+  color: var(--text);
   margin-bottom: 2px;
 }
 
@@ -3640,7 +3653,7 @@ button {
 .construct {
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: var(--surface-2);
 }
 
@@ -3684,7 +3697,7 @@ button {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: var(--surface-2);
   color: var(--text-3);
   font-size: 11px;
@@ -3801,7 +3814,7 @@ button {
 .exportFacts > div {
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: var(--surface-2);
   min-width: 0;
 }
@@ -3819,7 +3832,7 @@ button {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--text);
   overflow-wrap: anywhere;
 }
 
@@ -3835,7 +3848,7 @@ button {
 .lnCanvas {
   margin-top: 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background:
     radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 22px 22px,
     var(--surface-2);
@@ -3877,13 +3890,25 @@ button {
 .lnLabel {
   font-size: 12.5px;
   font-weight: 650;
-  fill: var(--text-1);
+  fill: var(--text);
   pointer-events: none;
 }
 
+/*
+ * The second line uses --text-2, not --text-3.
+ *
+ * At 10px on the tinted node fill, --text-3 measured 2.71:1 in light and
+ * 3.81:1 in dark; --text-2 still only reached 4.09:1 in light. Both are under
+ * the 4.5:1 small text needs, because the tint costs contrast that the same
+ * token keeps on a plain surface.
+ *
+ * So the second line carries the full text colour and takes its place in the
+ * hierarchy from size and weight instead — 10px regular under 12.5px
+ * semibold reads as secondary without being hard to read.
+ */
 .lnSub {
   font-size: 10px;
-  fill: var(--text-3);
+  fill: var(--text);
   pointer-events: none;
 }
 
@@ -3893,7 +3918,7 @@ button {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  fill: var(--text-3);
+  fill: var(--text-2);
   pointer-events: none;
 }
 
@@ -3959,7 +3984,7 @@ button {
 .lnChip em {
   font-style: normal;
   font-size: 11px;
-  color: var(--text-1);
+  color: var(--text);
 }
 
 .lnChip.lnSource  { border-color: #7c6ba8; }
@@ -3972,7 +3997,7 @@ button {
   margin-top: 16px;
   padding: 16px 18px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: var(--surface-2);
 }
 
@@ -3988,5 +4013,5 @@ button.linkish {
 }
 
 button.linkish:hover {
-  color: var(--text-1);
+  color: var(--text);
 }
