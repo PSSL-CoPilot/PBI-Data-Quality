@@ -49,6 +49,7 @@ import {
 import { Changes } from "./Changes.tsx";
 import { DrawerHostProvider, useDrawerOpen } from "./drawer.tsx";
 import { Export } from "./Export.tsx";
+import { Lineage } from "./Lineage.tsx";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { Measures } from "./Measures.tsx";
 import { Queries } from "./Queries.tsx";
@@ -62,6 +63,7 @@ type View =
   | "Measures"
   | "Tables"
   | "Queries"
+  | "Lineage"
   | "Quality"
   | "Optimize"
   | "Changes"
@@ -78,13 +80,16 @@ const NAV: View[] = [
   "Measures",
   "Tables",
   "Queries",
+  // Lineage sits after Queries because it reads the whole chain the previous
+  // three screens each show one link of.
+  "Lineage",
   "Quality",
   "Optimize",
   "Changes",
   "Export",
   "Settings",
 ];
-const ICONS = ["⌂", "ƒ", "▦", "⌗", "✓", "◎", "⎋", "⤓", "⚙"];
+const ICONS = ["⌂", "ƒ", "▦", "⌗", "⤳", "✓", "◎", "⎋", "⤓", "⚙"];
 
 /** Views that cannot render anything truthful without a semantic model. */
 /*
@@ -534,6 +539,8 @@ function Views({ view, ...props }: ViewProps & { view: View }) {
           onApply={props.onApply}
         />
       );
+    case "Lineage":
+      return <Lineage model={model} />;
     case "Export":
       return <Export model={model} />;
     case "Settings":
