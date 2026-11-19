@@ -27,6 +27,7 @@ import type { Model, Visual } from "../powerbi/model.ts";
 import { allMeasures } from "../powerbi/model.ts";
 import { analyseMeasureSources, type MeasureSources } from "../powerbi/sources.ts";
 import { readSqlFacts } from "../export/definitions.ts";
+import { nameKpi, readGlossary, type KpiName } from "./kpiname.ts";
 
 /*
  * `visual` is the thing on the page; `kpi` is the name that thing reports.
@@ -120,6 +121,51 @@ function callsOf(expression: string, known: Map<string, string>): string[] {
 
 /* ---------------------------------------------------------------- build --- */
 
+/**
+ * Names every KPI in a model, once.
+ *
+ * Shared by the graph and the selector list. If those two derived a name
+ * differently, picking "Churn Percentage" in the dropdown would filter on a
+ * name the diagram never produced and the screen would come back empty.
+ *
+ * Titles are gathered across the whole report rather than the page in view,
+ * because the name of a KPI does not change according to which page you
+ * happen to be looking at.
+ */
+export function kpiNamer(model: Model) {
+  const glossary = readGlossary(model);
+  const known = new Set(allMeasures(model).map((m) => m.name));
+
+  const titles = new Map<string, string[]>();
+  for (const page of model.pages) {
+    for (const visual of page.visuals) {
+      if (!isKpiVisual(visual) || !visual.title) continue;
+      for (const ref of visual.refs) {
+        if (ref.kind !== "measure" || !known.has(ref.field)) continue;
+        const list = titles.get(ref.field);
+        if (list) list.push(visual.title);
+        else titles.set(ref.field, [visual.title]);
+      }
+    }
+  }
+
+  const cache = new Map<string, KpiName>();
+  const forMeasure = (name: string): KpiName => {
+    const hit = cache.get(name);
+    if (hit) return hit;
+    const result = nameKpi(titles.get(name) ?? [], name, glossary);
+    cache.set(name, result);
+    return result;
+  };
+
+  const forVisual = (visual: Visual): KpiName | undefined => {
+    const first = visual.refs.find((r) => r.kind === "measure" && known.has(r.field));
+    return first ? forMeasure(first.field) : undefined;
+  };
+
+  return { forMeasure, forVisual, glossary };
+}
+
 export interface LineageOptions {
   /** Restrict to KPIs on this page; omit for every page. */
   page?: string;
@@ -212,10 +258,11 @@ export function buildLineage(model: Model, options: LineageOptions = {}): Lineag
    * measure is the same object in every one of those visuals, so it groups
    * them exactly.
    */
+  const namer = kpiNamer(model);
+
   const kpiNameOf = (entry: KpiEntry): string | undefined => {
     const first = entry.measureIds.map((id) => measures.get(id)).find(Boolean);
-    if (!first) return undefined;
-    return bestKpiName(kpiNames, first.table, first.name)?.label ?? first.name;
+    return first ? namer.forMeasure(first.name).name : undefined;
   };
 
   if (options.focusKpiName) {
@@ -254,18 +301,29 @@ export function buildLineage(model: Model, options: LineageOptions = {}): Lineag
 
     const id = kpiNameKey(name);
     const shown = kpis.filter((k) => kpiNameOf(k) === name);
+    const firstMeasure = kpi.measureIds.map((m) => measures.get(m)).find(Boolean);
+    const naming = firstMeasure ? namer.forMeasure(firstMeasure.name) : undefined;
+
     addNode({
       id,
       kind: "kpi",
       label: name,
       sublabel:
-        shown.length === 1 ? "1 visual" : `${shown.length} visuals`,
-      detail:
+        naming?.source === "glossary"
+          ? "from the glossary"
+          : shown.length === 1
+            ? "1 visual"
+            : `${shown.length} visuals`,
+      detail: [
         shown.length === 1
           ? `Reported by one visual on ${kpi.pageDisplay}.`
           : `Reported by ${shown.length} visuals: ${shown
               .map((k) => k.visual.title ?? k.visual.type)
               .join(", ")}. They all show the same number.`,
+        naming?.reason,
+      ]
+        .filter(Boolean)
+        .join(" "),
     });
     addEdge({
       from: kpi.id,
@@ -468,6 +526,7 @@ export function listKpis(model: Model): Array<{
   kpiName?: string;
 }> {
   const kpiNames = inferKpiNames(model);
+  const namer = kpiNamer(model);
   const out: ReturnType<typeof listKpis> = [];
 
   for (const page of model.pages) {
@@ -485,12 +544,7 @@ export function listKpis(model: Model): Array<{
         pageName: page.name,
         visualType: visual.type,
         measureCount: visual.refs.filter((r) => r.kind === "measure").length,
-        // Same rule the graph uses: the measure names the KPI, not the title.
-        kpiName: (() => {
-          const first = visual.refs.find((r) => r.kind === "measure");
-          if (!first) return undefined;
-          return bestKpiName(kpiNames, first.table ?? "", first.field)?.label ?? first.field;
-        })(),
+        kpiName: namer.forVisual(visual)?.name,
       });
     }
   }
